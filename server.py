@@ -288,6 +288,15 @@ class Handler(SimpleHTTPRequestHandler):
         if p=='/api/contact':
             arr=rows('events'); arr.append({'id':time.time(),'date':time.strftime('%Y-%m-%d %H:%M:%S'),'action':'Aceptación de condiciones','provider':body.get('providerName','—'),'detail':f"Usuario aceptó {body.get('termsVersion','TIVA-CONEXION-v1.0')}; contacto por WhatsApp"}); replace('events',arr[-500:]); return self.send_json({'ok':True})
         if p=='/api/application':
+            # Registro de prestador: exige autorización previa, expresa e informada
+            # y conserva la evidencia junto con la solicitud para consulta posterior.
+            if body.get('dataAuthorizationAccepted') is not True:
+                return self.send_json({'error':'La autorización para el tratamiento de datos personales es obligatoria.'},400)
+            body['dataResponsible']='Bladimir Mena'
+            body['dataRightsEmail']='tivaservirce@gmail.com'
+            body['authorizationVersion']=str(body.get('authorizationVersion') or 'TIVA-DATOS-v1.0')
+            body['authorizationAcceptedAt']=body.get('authorizationAcceptedAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
+            body['dataAuthorizationAccepted']=True
             # La solicitud se crea primero con metadata. Los archivos se suben
             # por separado para evitar enviar dos archivos de hasta 2 MB dentro
             # de un único JSON/base64 (que puede superar los límites del proxy).

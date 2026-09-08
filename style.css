@@ -10,3 +10,5 @@
 .review-photo{display:flex;justify-content:center;align-items:center;padding:10px}.review-photo img{max-width:220px;max-height:280px;object-fit:cover;border-radius:14px;border:1px solid #ddd}.review-grid a.secondary{display:inline-block;margin-top:6px;padding:6px 9px;font-size:12px;text-decoration:none}
 
 .provider-avatar{width:92px;height:92px;margin:0 auto 12px;border-radius:50%;overflow:hidden;border:3px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.12)}.provider-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.privacy-box{margin-top:8px;padding:18px;border:1px solid rgba(180,30,30,.25);border-radius:14px;background:rgba(255,255,255,.04)}
+.privacy-box h3{margin:0 0 10px}.privacy-box p{margin:8px 0;line-height:1.5}.consent-check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-weight:600}.consent-check input{margin-top:4px;transform:scale(1.15)}

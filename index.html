@@ -69,7 +69,17 @@
       <label>Copia de cédula <span class="limit">Máx. 2 MB</span><input type="file" name="idDoc" id="idDoc" accept="image/*,.pdf" required><small>Se usa únicamente para revisión de la solicitud.</small></label>
       <label>Foto de perfil <span class="limit">Máx. 2 MB</span><input type="file" name="photo" id="photo" accept="image/*" required><small>Foto clara para identificar al prestador.</small></label>
       <div class="full security-note">🔒 <b>Protección de documentos:</b> los archivos se envían directamente al servidor para revisión administrativa. La cédula queda restringida al administrador; si la solicitud es aprobada, la foto enviada se asociará al perfil del prestador.</div>
-      <div class="full actions"><button type="button" id="registerBack">Cancelar</button><button class="primary">Enviar solicitud</button></div>
+      <div class="full privacy-box">
+        <h3>Autorización para el tratamiento de datos personales</h3>
+        <p>Para registrarte como prestador en TIVA, <b>Bladimir Mena</b> recolectará y tratará los datos que suministres en este formulario, incluidos tus datos de contacto, información del servicio, ciudad, documento de identificación y fotografía.</p>
+        <p><b>Finalidades:</b> verificar tu identidad e información, revisar y gestionar tu solicitud, administrar tu perfil si es aprobado, permitir que los usuarios encuentren y contacten tu perfil, gestionar tu membresía y cumplir obligaciones legales.</p>
+        <p>Como titular puedes conocer, actualizar y rectificar tus datos, solicitar su supresión o revocar la autorización cuando corresponda, y ejercer los demás derechos previstos en la normativa aplicable.</p>
+        <p><b>Responsable:</b> Bladimir Mena<br><b>Correo para ejercer derechos:</b> tivaservirce@gmail.com</p>
+        <p>La información y los documentos enviados serán <b>revisados por la administración de TIVA antes de aprobar o activar tu perfil</b>. La autorización es previa, expresa e informada y quedará registrada junto con la fecha y versión de esta autorización.</p>
+        <label class="consent-check"><input type="checkbox" name="dataConsent" id="dataConsent" required> <span>He leído y autorizo a TIVA para el tratamiento de mis datos personales conforme a esta autorización.</span></label>
+      </div>
+      <div class="full actions"><button type="button" id="registerBack">Cancelar</button><button class="primary" id="registerSubmit" disabled>Enviar solicitud</button></div>
+      <div id="registerSuccess" class="success-box hidden"></div>
     </form>
   </section>
   <section class="card"><div class="section-title"><div><h2>100 servicios disponibles</h2><p>Elige el servicio que mejor corresponda a lo que ofreces.</p></div></div><div id="serviceCatalog" class="service-catalog"></div></section>
