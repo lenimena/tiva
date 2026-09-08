@@ -292,8 +292,8 @@ class Handler(SimpleHTTPRequestHandler):
             # y conserva la evidencia junto con la solicitud para consulta posterior.
             if body.get('dataAuthorizationAccepted') is not True:
                 return self.send_json({'error':'La autorización para el tratamiento de datos personales es obligatoria.'},400)
-            body['dataResponsible']='Bladimir Mena'
-            body['dataRightsEmail']='tivaservirce@gmail.com'
+            body['dataResponsible']='Bladimir Mena — CEO & Founder de TIVA'
+            body['dataRightsEmail']='tivaservices@gmail.com'
             body['authorizationVersion']=str(body.get('authorizationVersion') or 'TIVA-DATOS-v1.0')
             body['authorizationAcceptedAt']=body.get('authorizationAcceptedAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
             body['dataAuthorizationAccepted']=True

@@ -12,3 +12,5 @@
 .provider-avatar{width:92px;height:92px;margin:0 auto 12px;border-radius:50%;overflow:hidden;border:3px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.12)}.provider-avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .privacy-box{margin-top:8px;padding:18px;border:1px solid rgba(180,30,30,.25);border-radius:14px;background:rgba(255,255,255,.04)}
 .privacy-box h3{margin:0 0 10px}.privacy-box p{margin:8px 0;line-height:1.5}.consent-check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-weight:600}.consent-check input{margin-top:4px;transform:scale(1.15)}
+
+.payment-box{margin-top:4px;padding:18px;border:1px solid #dfe5ee;border-radius:14px;background:#f8fafc}.payment-box h3{margin:0 0 8px}.payment-box p{margin:6px 0}.payment-link{display:inline-block;text-decoration:none;margin-top:10px}.payment-link.disabled{opacity:.55;pointer-events:none;cursor:not-allowed}.payment-note{font-size:13px;color:#5d6879}.payment-box + input{display:none}

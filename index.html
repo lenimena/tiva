@@ -45,8 +45,14 @@
 <label>WhatsApp<input name="phone" required placeholder="3001234567"></label>
 <label>Ciudad<select name="city" required><option value="">Selecciona una ciudad</option><option value="Buenaventura">Buenaventura</option></select></label>
 <label>Servicio<select name="service" id="renewalService" required></select></label>
-<label>Plan<select name="plan" required><option value="mensual">Mensual</option><option value="anual">Anual</option></select></label>
-<label>Valor pagado<input name="amount" required placeholder="Ej. 50000"></label>
+<label>Plan<select name="plan" id="renewalPlan" required><option value="">Selecciona una membresía</option><option value="mensual">Mensual — $20.000 COP</option><option value="anual">Anual — $100.000 COP</option></select></label>
+<div class="full payment-box" id="membershipPaymentBox">
+  <h3>Pago de la membresía</h3>
+  <p id="paymentAmountText">Selecciona una membresía para ver el valor.</p>
+  <a id="paymentLinkBtn" class="primary payment-link disabled" href="#" target="_blank" rel="noopener" aria-disabled="true">Pagar con Nequi</a>
+  <p class="payment-note">Después de realizar el pago, regresa a TIVA y adjunta el comprobante para que administración pueda verificarlo.</p>
+</div>
+<input type="hidden" name="amount" id="renewalAmount">
 <label>Fecha del pago<input type="date" name="paymentDate" id="renewalPaymentDate" required></label>
 <label>Comprobante <span class="limit">Máx. 5 MB</span><input type="file" name="receipt" id="renewalReceipt" accept="image/*,.pdf" required><small>Adjunta una imagen o PDF legible.</small></label>
 <label class="full">Observaciones<textarea name="notes" rows="4" placeholder="Información adicional, si aplica."></textarea></label>
@@ -71,10 +77,10 @@
       <div class="full security-note">🔒 <b>Protección de documentos:</b> los archivos se envían directamente al servidor para revisión administrativa. La cédula queda restringida al administrador; si la solicitud es aprobada, la foto enviada se asociará al perfil del prestador.</div>
       <div class="full privacy-box">
         <h3>Autorización para el tratamiento de datos personales</h3>
-        <p>Para registrarte como prestador en TIVA, <b>Bladimir Mena</b> recolectará y tratará los datos que suministres en este formulario, incluidos tus datos de contacto, información del servicio, ciudad, documento de identificación y fotografía.</p>
+        <p>Para registrarte como prestador en TIVA, <b>TIVA</b> recolectará y tratará los datos que suministres en este formulario, incluidos tus datos de contacto, información del servicio, ciudad, documento de identificación y fotografía.</p>
         <p><b>Finalidades:</b> verificar tu identidad e información, revisar y gestionar tu solicitud, administrar tu perfil si es aprobado, permitir que los usuarios encuentren y contacten tu perfil, gestionar tu membresía y cumplir obligaciones legales.</p>
         <p>Como titular puedes conocer, actualizar y rectificar tus datos, solicitar su supresión o revocar la autorización cuando corresponda, y ejercer los demás derechos previstos en la normativa aplicable.</p>
-        <p><b>Responsable:</b> Bladimir Mena<br><b>Correo para ejercer derechos:</b> tivaservirce@gmail.com</p>
+        <p><b>Responsable del tratamiento:</b> Bladimir Mena — CEO &amp; Founder de TIVA<br><b>Correo para ejercer derechos:</b> tivaservices@gmail.com</p>
         <p>La información y los documentos enviados serán <b>revisados por la administración de TIVA antes de aprobar o activar tu perfil</b>. La autorización es previa, expresa e informada y quedará registrada junto con la fecha y versión de esta autorización.</p>
         <label class="consent-check"><input type="checkbox" name="dataConsent" id="dataConsent" required> <span>He leído y autorizo a TIVA para el tratamiento de mis datos personales conforme a esta autorización.</span></label>
       </div>
