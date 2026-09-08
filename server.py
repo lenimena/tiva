@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, sqlite3, mimetypes, hashlib, secrets, time, base64
+import json, os, sqlite3, mimetypes, hashlib, secrets, time, base64, calendar, datetime
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 
@@ -90,6 +90,24 @@ def is_admin(handler):
         return True
     return False
 
+def normalize_phone_value(phone):
+    digits=''.join(ch for ch in str(phone or '') if ch.isdigit())
+    if digits.startswith('57') and len(digits)==12:
+        return digits[2:]
+    return digits
+
+def add_months_value(start, months):
+    d=datetime.date.fromisoformat(str(start))
+    month=d.month-1+int(months)
+    year=d.year+month//12
+    month=month%12+1
+    day=min(d.day, calendar.monthrange(year, month)[1])
+    return datetime.date(year, month, day).isoformat()
+
+def provider_matches(provider, phone, service):
+    return (normalize_phone_value(provider.get('phone')) == normalize_phone_value(phone) and
+            str(provider.get('service') or '').strip().casefold() == str(service or '').strip().casefold())
+
 def require_admin(handler):
     if not is_admin(handler):
         handler.send_json({'error':'No autorizado'},401)
@@ -113,7 +131,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Headers','Content-Type'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS'); self.end_headers()
     def do_GET(self):
         p=urlparse(self.path).path
-        if p=='/api/health': return self.send_json({'ok':True,'version':'V17.5','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
+        if p=='/api/health': return self.send_json({'ok':True,'version':'V18.4','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'nequi-manual-verification'})
         if p=='/api/session': return self.send_json({'authenticated':is_admin(self),'user':ADMIN_USER if is_admin(self) else None})
         if p=='/api/application-file':
             if not require_admin(self): return
@@ -166,6 +184,21 @@ class Handler(SimpleHTTPRequestHandler):
         if p=='/api/state':
             if not require_admin(self): return
             return self.send_json(state())
+        if p=='/api/provider-lookup':
+            from urllib.parse import parse_qs
+            q=parse_qs(urlparse(self.path).query)
+            phone=q.get('phone',[''])[0]
+            service=q.get('service',[''])[0]
+            if not phone or not service:
+                return self.send_json({'ok':False,'exists':False,'message':'Ingresa tu número de WhatsApp y selecciona el servicio.'},400)
+            matches=[x for x in rows('providers') if isinstance(x,dict) and provider_matches(x,phone,service)]
+            if not matches:
+                return self.send_json({'ok':True,'exists':False,'message':'No encontramos un prestador registrado con ese número de WhatsApp y servicio. Verifica los datos o realiza primero el registro como prestador.'})
+            x=matches[0]
+            today_value=time.strftime('%Y-%m-%d')
+            expiration=str(x.get('expiration') or '')
+            is_expired=bool(expiration and expiration < today_value)
+            return self.send_json({'ok':True,'exists':True,'provider':{'id':x.get('id'),'name':x.get('name'),'service':x.get('service'),'city':x.get('city'),'active':bool(x.get('active')),'expired':is_expired,'expiration':expiration,'plan':x.get('plan')},'message':'Prestador encontrado. Puedes continuar con la selección de la membresía y el pago.'})
         if p=='/api/providers':
             # Catálogo público: solo prestadores activos y no vencidos.
             # No expone solicitudes, cédulas, fotos documentales ni auditoría.
@@ -301,12 +334,19 @@ class Handler(SimpleHTTPRequestHandler):
             finally: c.close()
             return self.send_json({'ok':True,'application':body})
         if p=='/api/renewal':
-            # Public renewal request. No payment receipt is uploaded or stored.
-            # The administrator verifies the payment directly in Nequi Negocios.
+            # Public renewal request. The provider must already exist by WhatsApp + service.
             allowed_plans={'mensual':'20000','anual':'100000'}
             plan=str(body.get('plan') or '')
             if plan not in allowed_plans:
                 return self.send_json({'error':'Membresía no válida'},400)
+            phone=str(body.get('phone') or '').strip()
+            service=str(body.get('service') or '').strip()
+            matches=[x for x in rows('providers') if isinstance(x,dict) and provider_matches(x,phone,service)]
+            if not matches:
+                return self.send_json({'error':'No encontramos un prestador registrado con ese número de WhatsApp y servicio. Verifica los datos o realiza primero el registro como prestador.'},404)
+            provider=matches[0]
+            body['providerId']=provider.get('id')
+            body['providerName']=provider.get('name')
             body['amount']=allowed_plans[plan]
             body['status']='pendiente_verificacion'
             body.setdefault('createdAt',time.strftime('%Y-%m-%d %H:%M:%S'))
@@ -314,7 +354,39 @@ class Handler(SimpleHTTPRequestHandler):
             for k in ('receiptData','receiptPath','receiptName','receiptSize','notes','paymentDate'):
                 body.pop(k,None)
             arr=rows('renewals'); arr.append(body); replace('renewals',arr[-500:])
-            return self.send_json({'ok':True,'renewal':body})
+            return self.send_json({'ok':True,'renewal':body,'provider':{'id':provider.get('id'),'name':provider.get('name'),'service':provider.get('service'),'city':provider.get('city'),'expiration':provider.get('expiration'),'active':provider.get('active')}})
+        if p=='/api/renewal/approve':
+            if not require_admin(self): return
+            rid=str(body.get('id') or '')
+            renewals_list=rows('renewals')
+            r=next((x for x in renewals_list if str(x.get('id'))==rid),None)
+            if not r:
+                return self.send_json({'error':'Solicitud de renovación no encontrada.'},404)
+            if r.get('status')!='pendiente_verificacion':
+                return self.send_json({'error':'Esta solicitud ya fue procesada.'},409)
+            matches=[x for x in rows('providers') if isinstance(x,dict) and provider_matches(x,r.get('phone'),r.get('service'))]
+            if not matches:
+                return self.send_json({'error':'No se encontró el registro del prestador por WhatsApp y servicio.'},404)
+            provider=matches[0]
+            start=time.strftime('%Y-%m-%d') if (not provider.get('expiration') or str(provider.get('expiration')) < time.strftime('%Y-%m-%d')) else str(provider.get('expiration'))
+            plan=str(r.get('plan') or 'mensual')
+            months=12 if plan=='anual' else 1
+            expiration=add_months_value(start,months)
+            provider['plan']=plan
+            provider['expiration']=expiration
+            provider['active']=True
+            provider['autoExpired']=False
+            provider['lastRenewalAt']=time.strftime('%Y-%m-%d %H:%M:%S')
+            provider['lastRenewalId']=r.get('id')
+            r['status']='aprobada'
+            r['approvedAt']=time.strftime('%Y-%m-%d %H:%M:%S')
+            r['providerId']=provider.get('id')
+            r['providerName']=provider.get('name')
+            r['start']=start
+            r['expiration']=expiration
+            replace('providers',rows('providers') if False else [provider if str(x.get('id'))==str(provider.get('id')) else x for x in rows('providers')])
+            replace('renewals',renewals_list)
+            return self.send_json({'ok':True,'renewal':r,'provider':provider})
         if p=='/api/state':
             if not require_admin(self): return
             for table,key in [('providers','data'),('applications','applications'),('renewals','renewals'),('events','events'),('notifications','notifications')]:
@@ -332,5 +404,5 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_json({'error':'Ruta no encontrada'},404)
 
 if __name__=='__main__':
-    init(); print(f'TIVA V17.6 funcionando en http://localhost:{PORT}')
+    init(); print(f'TIVA V18.4 funcionando en http://localhost:{PORT}')
     ThreadingHTTPServer(('0.0.0.0',PORT),Handler).serve_forever()

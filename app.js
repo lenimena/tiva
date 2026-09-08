@@ -117,7 +117,7 @@ Para envío real conectaremos WhatsApp Business Platform.`);}
 
 fillServices();normalizeApplications();render();renderV8();updateBackendBadge();bootBackend();setInterval(()=>{render();renderV8()},60000);
 
-// V18.2 — Renovación mediante Link de Pago Nequi, sin comprobantes
+// V18.4 — Renovación mediante Link de Pago Nequi con validación por WhatsApp + servicio
 function renewalUrl(){ return window.location.origin + window.location.pathname + '?renovar=1'; }
 function renewalMessage(x){ return `🔴 Tu membresía TIVA ha vencido\n\nHola ${x.name}, tu membresía se encuentra vencida y tu perfil actualmente no aparece en las búsquedas de clientes.\n\n🔄 Renueva tu membresía aquí:\n${renewalUrl()}\n\nElige tu plan y realiza el pago desde el enlace de Nequi.\n\n⏱️ IMPORTANTE: TIVA verificará el pago en un plazo de hasta 24 horas hábiles. Los pagos realizados los viernes serán habilitados el lunes hábil, una vez realizada la verificación.\n\nGracias por continuar siendo parte de TIVA.`; }
 function openRenewal(){ showView('renewal'); $('#renewalSuccess').classList.add('hidden'); window.scrollTo(0,0); }
@@ -127,18 +127,35 @@ function renderRenewalRequests(){
   badge.textContent=`${pending.length} pendiente${pending.length===1?'':'s'}`;
   body.innerHTML=pending.slice().reverse().map(r=>`<tr><td>${esc(r.createdAt||r.date||'')}</td><td><b>${esc(r.name||r.providerName||'')}</b><br><small>${esc(r.phone||'')}</small><br><small>${esc(r.city||'')} · ${esc(r.service||'')}</small></td><td>${r.plan==='anual'?'Anual':'Mensual'}</td><td><b>${r.plan==='anual'?'$100.000 COP':'$20.000 COP'}</b><br><small>Nequi · Link de pago</small></td><td><span class="status bad">Pendiente de verificación</span></td><td><div class="review-actions"><button class="primary" onclick="approveRenewal(${JSON.stringify(r.id)})">✅ Aprobar</button><button class="renew" onclick="rejectRenewal(${JSON.stringify(r.id)})">❌ Rechazar</button></div></td></tr>`).join('')||'<tr><td colspan="6">No hay solicitudes de renovación pendientes.</td></tr>';
 }
-function approveRenewal(id){
+async function approveRenewal(id){
   const r=renewals.find(x=>String(x.id)===String(id)); if(!r)return;
-  const x=data.find(p=>normalizePhoneForWa(p.phone)===normalizePhoneForWa(r.phone)) || data.find(p=>p.name.trim().toLowerCase()===String(r.name||'').trim().toLowerCase());
-  if(!x){alert('No se encontró un prestador que coincida con el nombre o WhatsApp de la solicitud.');return;}
+  if(backendOnline){
+    try{
+      const rr=await fetch(API+'/renewal/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})});
+      const out=await rr.json();
+      if(!rr.ok)throw new Error(out.error||'No fue posible aprobar la renovación.');
+      const updatedProvider=out.provider, updatedRenewal=out.renewal;
+      const idx=data.findIndex(x=>String(x.id)===String(updatedProvider.id));
+      if(idx>=0)data[idx]=updatedProvider; else data.push(updatedProvider);
+      const ri=renewals.findIndex(x=>String(x.id)===String(updatedRenewal.id));
+      if(ri>=0)renewals[ri]=updatedRenewal;
+      const history={id:Date.now()+Math.random(),providerId:updatedProvider.id,providerName:updatedProvider.name,plan:updatedRenewal.plan,start:updatedRenewal.start,expiration:updatedRenewal.expiration,date:today(),amount:updatedRenewal.amount||'',paymentMethod:'Nequi / Link de pago TIVA',source:'Pago verificado manualmente en Nequi'};
+      renewals.push(history);
+      logEvent('Renovación aprobada',updatedProvider,`Pago verificado en Nequi · ${updatedRenewal.plan} · nuevo vencimiento ${updatedRenewal.expiration}`);
+      notifyWhatsApp(updatedProvider,'Renovación aprobada',`🎉 ¡Renovación confirmada!\n\nHola ${updatedProvider.name}, tu pago fue verificado correctamente.\n\n✅ Estado: ACTIVO\n📋 Plan: ${updatedRenewal.plan==='anual'?'Anual':'Mensual'}\n📅 Inicio: ${updatedRenewal.start}\n📅 Nueva fecha de vencimiento: ${updatedRenewal.expiration}\n\nGracias por continuar siendo parte de TIVA. 🚀`);
+      save(); render(); renderV8(); renderRenewalRequests(); alert('Pago aprobado. El registro existente del prestador fue actualizado y quedó activo.');
+      return;
+    }catch(err){alert(err.message||'No fue posible aprobar la renovación.');return;}
+  }
+  const x=data.find(p=>normalizePhoneForWa(p.phone)===normalizePhoneForWa(r.phone) && String(p.service||'').trim().toLowerCase()===String(r.service||'').trim().toLowerCase());
+  if(!x){alert('No se encontró un prestador que coincida con WhatsApp y servicio.');return;}
   const start=expired(x)?today():(x.expiration||today()); const plan=r.plan||'mensual'; const exp=addMonths(start,monthsFor(plan));
-  x.plan=plan; x.registration=start; x.expiration=exp; x.active=true; x.autoExpired=false;
+  x.plan=plan; x.expiration=exp; x.active=true; x.autoExpired=false;
   r.status='aprobada'; r.approvedAt=new Date().toLocaleString('es-CO'); r.providerId=x.id; r.providerName=x.name; r.start=start; r.expiration=exp;
   const history={id:Date.now()+Math.random(),providerId:x.id,providerName:x.name,plan,start,expiration:exp,date:today(),amount:r.amount||'',paymentMethod:'Nequi / Link de pago TIVA',source:'Pago verificado manualmente en Nequi'};
-  renewals.push(history);
-  logEvent('Renovación aprobada',x,`Pago verificado en Nequi · ${plan} · nuevo vencimiento ${exp}`);
+  renewals.push(history); logEvent('Renovación aprobada',x,`Pago verificado en Nequi · ${plan} · nuevo vencimiento ${exp}`);
   notifyWhatsApp(x,'Renovación aprobada',`🎉 ¡Renovación confirmada!\n\nHola ${x.name}, tu pago fue verificado correctamente.\n\n✅ Estado: ACTIVO\n📋 Plan: ${plan==='anual'?'Anual':'Mensual'}\n📅 Inicio: ${start}\n📅 Nueva fecha de vencimiento: ${exp}\n\nGracias por continuar siendo parte de TIVA. 🚀`);
-  save(); render(); renderV8(); renderRenewalRequests(); alert('Pago aprobado. El prestador quedó activo y se preparó la notificación de renovación.');
+  save(); render(); renderV8(); renderRenewalRequests(); alert('Pago aprobado. El registro existente del prestador fue actualizado y quedó activo.');
 }
 function rejectRenewal(id){
   const r=renewals.find(x=>String(x.id)===String(id)); if(!r)return; const reason=prompt('Motivo del rechazo del pago:','No fue posible verificar el pago en Nequi.'); if(reason===null)return;
@@ -151,17 +168,37 @@ function rejectRenewal(id){
 function initV18_2(){
   const rs=$('#renewalService'); if(rs) rs.innerHTML='<option value="">Selecciona un servicio</option>'+SERVICES.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
   const planSelect=$('#renewalPlan'), paymentText=$('#paymentAmountText'), paymentBtn=$('#paymentLinkBtn'), benefits=$('#membershipBenefits');
+  const phoneInput=$('#renewalRequestForm input[name="phone"]'), serviceInput=rs, validationBox=$('#renewalProviderValidation');
   const paymentLinks={mensual:'https://checkout.nequi.wompi.co/l/svhoxW',anual:'https://checkout.nequi.wompi.co/method'};
   const paymentAmounts={mensual:'20000',anual:'100000'};
   const benefitText={
     mensual:'Vigencia de 30 días. Mantén tu perfil activo en TIVA, visible para clientes y disponible para recibir contactos por WhatsApp durante el período de la membresía.',
     anual:'Vigencia de 12 meses. Mantén tu perfil activo durante todo el año y ahorra frente al pago mensual. Ideal si quieres permanecer en TIVA sin renovar cada mes.'
   };
+  let renewalProviderValid=false, renewalLookupTimer=null;
+  function setValidation(ok,message){ renewalProviderValid=!!ok; if(validationBox){validationBox.className=ok?'validation-message ok':'validation-message bad';validationBox.innerHTML=message||'';} if(paymentBtn)paymentBtn.disabled=!ok || !paymentLinks[planSelect?.value||'']; }
+  async function validateRenewalProvider(showRequired=false){
+    const phone=String(phoneInput?.value||'').trim(), service=String(serviceInput?.value||'').trim();
+    if(!phone||!service){setValidation(false,showRequired?'Completa WhatsApp y servicio para validar el prestador.':'');return false;}
+    setValidation(false,'🔎 Verificando que el prestador esté registrado...');
+    try{
+      const rr=await fetch(API+'/provider-lookup?phone='+encodeURIComponent(phone)+'&service='+encodeURIComponent(service));
+      const out=await rr.json();
+      if(out.exists){const p=out.provider||{}; setValidation(true,`✅ <b>Prestador encontrado:</b> ${esc(p.name||'')} · ${esc(p.service||service)}.<br><small>${p.expired?'Tu membresía está vencida y puede renovarse.':p.active?'Tu membresía está activa. La nueva vigencia se agregará al finalizar la actual.':'Tu registro existe y puede continuar con la renovación.'}</small>`); return true;}
+      setValidation(false,'❌ <b>Prestador no encontrado.</b> '+esc(out.message||'Verifica tu número de WhatsApp y servicio.')); return false;
+    }catch(err){
+      const local=data.find(p=>normalizePhoneForWa(p.phone)===normalizePhoneForWa(phone) && String(p.service||'').trim().toLowerCase()===service.toLowerCase());
+      if(local){setValidation(true,`✅ <b>Prestador encontrado:</b> ${esc(local.name||'')} · ${esc(local.service||service)}.`);return true;}
+      setValidation(false,'⚠️ No fue posible validar el registro en este momento. Intenta nuevamente.'); return false;
+    }
+  }
+  function scheduleRenewalValidation(){clearTimeout(renewalLookupTimer);renewalLookupTimer=setTimeout(()=>validateRenewalProvider(false),350);}
+  phoneInput?.addEventListener('input',scheduleRenewalValidation); phoneInput?.addEventListener('blur',()=>validateRenewalProvider(false)); serviceInput?.addEventListener('change',()=>validateRenewalProvider(false));
   function syncPaymentLink(){
     const plan=planSelect?.value||'';
     if(paymentText) paymentText.innerHTML=plan==='mensual'?'Membresía mensual: <b>$20.000 COP</b>':plan==='anual'?'Membresía anual: <b>$100.000 COP</b>':'Selecciona una membresía para continuar.';
     if(benefits) benefits.innerHTML=plan&&benefitText[plan]?`<p><b>${plan==='anual'?'⭐ Membresía anual':'🟢 Membresía mensual'}</b></p><p>${benefitText[plan]}</p>`:'<p>Selecciona una opción para conocer brevemente su vigencia y beneficios.</p>';
-    if(paymentBtn){ paymentBtn.disabled=!paymentLinks[plan]; paymentBtn.textContent=paymentLinks[plan]?`Pagar ${plan==='anual'?'$100.000':'$20.000'} con Nequi`:'Pagar con Nequi'; }
+    if(paymentBtn){ paymentBtn.disabled=!renewalProviderValid || !paymentLinks[plan]; paymentBtn.textContent=paymentLinks[plan]?`Pagar ${plan==='anual'?'$100.000':'$20.000'} con Nequi`:'Pagar con Nequi'; }
   }
   planSelect?.addEventListener('change',syncPaymentLink); syncPaymentLink();
   $('#navRenewal')?.addEventListener('click',e=>{e.preventDefault();openRenewal()}); $('#renewHomeBtn')?.addEventListener('click',()=>showView('landing'));
@@ -170,17 +207,18 @@ function initV18_2(){
     const f=new FormData(e.target), plan=f.get('plan'), expectedAmounts={mensual:'20000',anual:'100000'};
     if(!expectedAmounts[plan]){alert('Selecciona una membresía válida.');return;}
     if(!CITIES.includes(String(f.get('city')||''))){alert('Selecciona una ciudad válida.');return;}
+    const valid=await validateRenewalProvider(true); if(!valid){return;}
     const request={id:Date.now()+Math.random(),createdAt:new Date().toLocaleString('es-CO'),name:String(f.get('name')||'').trim(),phone:String(f.get('phone')||'').trim(),city:String(f.get('city')||'').trim(),service:String(f.get('service')||''),plan,amount:expectedAmounts[plan],status:'pendiente_verificacion',paymentMethod:'Nequi / Link de pago TIVA'};
     if(!request.name||!request.phone||!request.service){alert('Completa todos los datos requeridos.');return;}
     try{
       let stored={...request};
-      if(backendOnline){const rr=await fetch(API+'/renewal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stored)}); if(!rr.ok)throw new Error(); const out=await rr.json(); stored=out.renewal||stored;}
+      if(backendOnline){const rr=await fetch(API+'/renewal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stored)}); const out=await rr.json(); if(!rr.ok)throw new Error(out.error||'No fue posible registrar la solicitud.'); stored=out.renewal||stored;}
       renewals.push(stored); logEvent('Solicitud de renovación',stored,`Plan ${plan==='anual'?'anual':'mensual'} · pago iniciado en Nequi · verificación: hasta 24 horas hábiles`); save();
       const url=paymentLinks[plan];
       $('#renewalSuccess').innerHTML='✅ <b>Solicitud registrada.</b><br><br>Ahora serás llevado a la plataforma de pago de Nequi para completar el pago.<br><br>⏱️ TIVA verificará el pago en un plazo de hasta <b>24 horas hábiles</b>. Los pagos realizados los <b>viernes</b> serán habilitados el <b>lunes hábil</b>, una vez realizada la verificación.';
       $('#renewalSuccess').classList.remove('hidden');
       setTimeout(()=>{window.location.href=url;},250);
-    }catch(err){alert('No fue posible registrar la solicitud. Verifica que el servidor esté disponible e intenta nuevamente.');}
+    }catch(err){alert(err.message||'No fue posible registrar la solicitud. Verifica que el servidor esté disponible e intenta nuevamente.');}
   });
   const oldRender=render; window.render=()=>{oldRender();renderRenewalRequests();};
   renderRenewalRequests();
