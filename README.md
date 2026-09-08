@@ -1,6 +1,6 @@
-# TIVA V17.3 — Render + PostgreSQL
+# TIVA V17.4 — Render + PostgreSQL
 
-TIVA V17.3 está preparada para Render con PostgreSQL. Si existe `DATABASE_URL`, usa PostgreSQL; en local, si no existe, mantiene SQLite para desarrollo.
+TIVA V17.4 está preparada para Render con PostgreSQL. Si existe `DATABASE_URL`, usa PostgreSQL; en local, si no existe, mantiene SQLite para desarrollo.
 
 ## Render
 1. Crear un Render Postgres en la misma región del Web Service.
@@ -17,3 +17,6 @@ Sin `DATABASE_URL`, TIVA usa SQLite y puede arrancarse con `python server.py`.
 
 ## Documentos de prestadores
 El administrador autenticado puede abrir/descargar la cédula y ver la foto de cada solicitud pendiente. Los archivos se almacenan en PostgreSQL cuando DATABASE_URL está configurada. Al aprobar, la foto queda asociada al perfil público del prestador mediante /api/provider-photo. La cédula permanece restringida al administrador.
+
+
+V17.4 corrige la revisión de solicitudes: normaliza solicitudes que ya tienen cédula y foto recibidas aunque hayan quedado con estado subiendo_documentos, y hace robusta la selección por ID al abrir/revisar.

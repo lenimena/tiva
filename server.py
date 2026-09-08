@@ -113,7 +113,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Headers','Content-Type'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS'); self.end_headers()
     def do_GET(self):
         p=urlparse(self.path).path
-        if p=='/api/health': return self.send_json({'ok':True,'version':'V17.3','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
+        if p=='/api/health': return self.send_json({'ok':True,'version':'V17.4','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
         if p=='/api/session': return self.send_json({'authenticated':is_admin(self),'user':ADMIN_USER if is_admin(self) else None})
         if p=='/api/application-file':
             if not require_admin(self): return
@@ -334,5 +334,5 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_json({'error':'Ruta no encontrada'},404)
 
 if __name__=='__main__':
-    init(); print(f'TIVA V17.2 funcionando en http://localhost:{PORT}')
+    init(); print(f'TIVA V17.4 funcionando en http://localhost:{PORT}')
     ThreadingHTTPServer(('0.0.0.0',PORT),Handler).serve_forever()
