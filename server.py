@@ -113,7 +113,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Headers','Content-Type'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS'); self.end_headers()
     def do_GET(self):
         p=urlparse(self.path).path
-        if p=='/api/health': return self.send_json({'ok':True,'version':'V17.2','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
+        if p=='/api/health': return self.send_json({'ok':True,'version':'V17.3','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
         if p=='/api/session': return self.send_json({'authenticated':is_admin(self),'user':ADMIN_USER if is_admin(self) else None})
         if p=='/api/application-file':
             if not require_admin(self): return
@@ -194,50 +194,12 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
     def do_POST(self):
         p=urlparse(self.path).path
-        length=int(self.headers.get('Content-Length','0'))
-        try: body=json.loads(self.rfile.read(length) or '{}')
-        except Exception: return self.send_json({'error':'JSON inválido'},400)
-        if p=='/api/login':
-            user=str(body.get('username',''))
-            password=str(body.get('password',''))
-            if user!=ADMIN_USER or password!=ADMIN_PASSWORD:
-                return self.send_json({'error':'Usuario o contraseña incorrectos'},401)
-            token=secrets.token_urlsafe(32)
-            SESSIONS[token]=time.time()+8*60*60
-            self.send_response(200); raw=json.dumps({'ok':True,'user':ADMIN_USER}).encode(); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(raw))); self.send_header('Set-Cookie',f'prestadores_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800'); self.end_headers(); self.wfile.write(raw); return
-        if p=='/api/logout':
-            cookie=self.headers.get('Cookie','')
-            for part in cookie.split(';'):
-                part=part.strip()
-                if part.startswith('prestadores_session='): SESSIONS.pop(part.split('=',1)[1],None)
-            self.send_response(200); self.send_header('Set-Cookie','prestadores_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'); self.send_header('Content-Length','0'); self.end_headers(); return
-        if p=='/api/contact':
-            arr=rows('events'); arr.append({'id':time.time(),'date':time.strftime('%Y-%m-%d %H:%M:%S'),'action':'Aceptación de condiciones','provider':body.get('providerName','—'),'detail':f"Usuario aceptó {body.get('termsVersion','TIVA-CONEXION-v1.0')}; contacto por WhatsApp"}); replace('events',arr[-500:]); return self.send_json({'ok':True})
-        if p=='/api/application':
-            # La solicitud se crea primero con metadata. Los archivos se suben
-            # por separado para evitar enviar dos archivos de hasta 2 MB dentro
-            # de un único JSON/base64 (que puede superar los límites del proxy).
-            aid=str(body.get('id') or int(time.time()*1000))
-            for key in ('idDocData','photoData'):
-                body.pop(key,None)
-            body['id']=aid
-            body['status']='subiendo_documentos'
-            body['documentStatus']='esperando_documentos'
-            body['documentsStored']=False
-            body['idDocAvailable']=False
-            body['photoAvailable']=False
-            c=db()
-            try:
-                cur=c.cursor()
-                if USE_POSTGRES:
-                    cur.execute('INSERT INTO applications(id,data) VALUES(%s,%s) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',(aid,json.dumps(body,ensure_ascii=False)))
-                else:
-                    cur.execute('INSERT OR REPLACE INTO applications(id,data) VALUES(?,?)',(int(float(aid)) if aid.replace('.','',1).isdigit() else int(time.time()*1000),json.dumps(body,ensure_ascii=False)))
-                c.commit()
-            finally: c.close()
-            return self.send_json({'ok':True,'application':body})
+
+        # La subida de documentos NO es JSON: recibe los bytes binarios
+        # directamente en el cuerpo de la petición. Debe procesarse antes
+        # de intentar json.loads(), de lo contrario el servidor responde
+        # 'JSON inválido'.
         if p=='/api/application-file-upload':
-            # Cada archivo viaja como bytes en una petición independiente.
             aid=str(self.headers.get('X-Application-Id','')).strip()
             kind=str(self.headers.get('X-File-Kind','')).strip()
             filename=str(self.headers.get('X-File-Name','')).strip()
@@ -285,6 +247,49 @@ class Handler(SimpleHTTPRequestHandler):
                 raise
             finally: c.close()
             return self.send_json({'ok':True,'application':app,'kind':kind,'size':length})
+
+        length=int(self.headers.get('Content-Length','0'))
+        try: body=json.loads(self.rfile.read(length) or '{}')
+        except Exception: return self.send_json({'error':'JSON inválido'},400)
+        if p=='/api/login':
+            user=str(body.get('username',''))
+            password=str(body.get('password',''))
+            if user!=ADMIN_USER or password!=ADMIN_PASSWORD:
+                return self.send_json({'error':'Usuario o contraseña incorrectos'},401)
+            token=secrets.token_urlsafe(32)
+            SESSIONS[token]=time.time()+8*60*60
+            self.send_response(200); raw=json.dumps({'ok':True,'user':ADMIN_USER}).encode(); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(raw))); self.send_header('Set-Cookie',f'prestadores_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800'); self.end_headers(); self.wfile.write(raw); return
+        if p=='/api/logout':
+            cookie=self.headers.get('Cookie','')
+            for part in cookie.split(';'):
+                part=part.strip()
+                if part.startswith('prestadores_session='): SESSIONS.pop(part.split('=',1)[1],None)
+            self.send_response(200); self.send_header('Set-Cookie','prestadores_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'); self.send_header('Content-Length','0'); self.end_headers(); return
+        if p=='/api/contact':
+            arr=rows('events'); arr.append({'id':time.time(),'date':time.strftime('%Y-%m-%d %H:%M:%S'),'action':'Aceptación de condiciones','provider':body.get('providerName','—'),'detail':f"Usuario aceptó {body.get('termsVersion','TIVA-CONEXION-v1.0')}; contacto por WhatsApp"}); replace('events',arr[-500:]); return self.send_json({'ok':True})
+        if p=='/api/application':
+            # La solicitud se crea primero con metadata. Los archivos se suben
+            # por separado para evitar enviar dos archivos de hasta 2 MB dentro
+            # de un único JSON/base64 (que puede superar los límites del proxy).
+            aid=str(body.get('id') or int(time.time()*1000))
+            for key in ('idDocData','photoData'):
+                body.pop(key,None)
+            body['id']=aid
+            body['status']='subiendo_documentos'
+            body['documentStatus']='esperando_documentos'
+            body['documentsStored']=False
+            body['idDocAvailable']=False
+            body['photoAvailable']=False
+            c=db()
+            try:
+                cur=c.cursor()
+                if USE_POSTGRES:
+                    cur.execute('INSERT INTO applications(id,data) VALUES(%s,%s) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',(aid,json.dumps(body,ensure_ascii=False)))
+                else:
+                    cur.execute('INSERT OR REPLACE INTO applications(id,data) VALUES(?,?)',(int(float(aid)) if aid.replace('.','',1).isdigit() else int(time.time()*1000),json.dumps(body,ensure_ascii=False)))
+                c.commit()
+            finally: c.close()
+            return self.send_json({'ok':True,'application':body})
         if p=='/api/renewal':
             # Public renewal request. Receipt is written outside the database and only metadata/path is stored in SQLite.
             receipt=body.pop('receiptData',None)
