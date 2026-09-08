@@ -131,7 +131,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Headers','Content-Type'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS'); self.end_headers()
     def do_GET(self):
         p=urlparse(self.path).path
-        if p=='/api/health': return self.send_json({'ok':True,'version':'V18.4','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'nequi-manual-verification'})
+        if p=='/api/health': return self.send_json({'ok':True,'version':'V18.5','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'nequi-manual-verification'})
         if p=='/api/session': return self.send_json({'authenticated':is_admin(self),'user':ADMIN_USER if is_admin(self) else None})
         if p=='/api/application-file':
             if not require_admin(self): return
@@ -353,7 +353,21 @@ class Handler(SimpleHTTPRequestHandler):
             body['paymentMethod']='Nequi / Link de pago TIVA'
             for k in ('receiptData','receiptPath','receiptName','receiptSize','notes','paymentDate'):
                 body.pop(k,None)
-            arr=rows('renewals'); arr.append(body); replace('renewals',arr[-500:])
+            # Guardar la solicitud de forma atómica en la base de datos.
+            # No usamos /api/state ni localStorage para crear la renovación.
+            if not body.get('id'): body['id']=str(int(time.time()*1000))+secrets.token_hex(4)
+            c=db()
+            try:
+                cur=c.cursor(); payload=json.dumps(body,ensure_ascii=False); rid=str(body['id'])
+                if USE_POSTGRES:
+                    cur.execute('INSERT INTO renewals(id,data) VALUES(%s,%s) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',(rid,payload))
+                else:
+                    ident=int(time.time()*1000); cur.execute('INSERT OR REPLACE INTO renewals(id,data) VALUES(?,?)',(ident,payload))
+                c.commit()
+            except Exception as exc:
+                c.rollback()
+                return self.send_json({'error':f'No fue posible guardar la solicitud de renovación en el servidor: {exc}'},500)
+            finally: c.close()
             return self.send_json({'ok':True,'renewal':body,'provider':{'id':provider.get('id'),'name':provider.get('name'),'service':provider.get('service'),'city':provider.get('city'),'expiration':provider.get('expiration'),'active':provider.get('active')}})
         if p=='/api/renewal/approve':
             if not require_admin(self): return
@@ -384,8 +398,51 @@ class Handler(SimpleHTTPRequestHandler):
             r['providerName']=provider.get('name')
             r['start']=start
             r['expiration']=expiration
-            replace('providers',rows('providers') if False else [provider if str(x.get('id'))==str(provider.get('id')) else x for x in rows('providers')])
-            replace('renewals',renewals_list)
+            # Actualización directa del registro existente del prestador.
+            # Esto evita reconstruir toda la tabla y garantiza que la renovación
+            # modifique el mismo registro que fue encontrado por WhatsApp + servicio.
+            payload=json.dumps(provider,ensure_ascii=False)
+            c=db()
+            try:
+                cur=c.cursor()
+                if USE_POSTGRES:
+                    cur.execute('UPDATE providers SET data=%s WHERE id=%s',(payload,str(provider.get('id'))))
+                else:
+                    cur.execute('UPDATE providers SET data=? WHERE id=?',(payload,int(float(provider.get('id')))))
+                if cur.rowcount != 1:
+                    c.rollback()
+                    return self.send_json({'error':'No fue posible actualizar el registro existente del prestador.'},500)
+                # Guardar también el estado final de la solicitud de renovación.
+                rp=json.dumps(r,ensure_ascii=False)
+                if USE_POSTGRES:
+                    cur.execute('UPDATE renewals SET data=%s WHERE id=%s',(rp,rid))
+                else:
+                    # SQLite usa una PK numérica interna; el id público de la
+                    # solicitud puede ser numérico o alfanumérico. Buscamos la
+                    # fila por el id almacenado en el JSON para no fallar.
+                    internal_id=None
+                    if str(rid).replace('.','',1).isdigit():
+                        internal_id=int(float(rid))
+                        cur.execute('UPDATE renewals SET data=? WHERE id=?',(rp,internal_id))
+                    else:
+                        cur.execute('SELECT id,data FROM renewals')
+                        for row in cur.fetchall():
+                            try:
+                                saved=json.loads(row[1] if not isinstance(row,dict) else row['data'])
+                                if str(saved.get('id'))==rid:
+                                    internal_id=row[0] if not isinstance(row,dict) else row['id']
+                                    break
+                            except Exception:
+                                pass
+                        if internal_id is None:
+                            c.rollback()
+                            return self.send_json({'error':'No fue posible localizar la solicitud de renovación para actualizarla.'},500)
+                        cur.execute('UPDATE renewals SET data=? WHERE id=?',(rp,internal_id))
+                c.commit()
+            except Exception as exc:
+                c.rollback()
+                return self.send_json({'error':f'No fue posible actualizar la membresía en el servidor: {exc}'},500)
+            finally: c.close()
             return self.send_json({'ok':True,'renewal':r,'provider':provider})
         if p=='/api/state':
             if not require_admin(self): return

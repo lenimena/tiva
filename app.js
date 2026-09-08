@@ -212,7 +212,7 @@ function initV18_2(){
     if(!request.name||!request.phone||!request.service){alert('Completa todos los datos requeridos.');return;}
     try{
       let stored={...request};
-      if(backendOnline){const rr=await fetch(API+'/renewal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stored)}); const out=await rr.json(); if(!rr.ok)throw new Error(out.error||'No fue posible registrar la solicitud.'); stored=out.renewal||stored;}
+      if(!backendOnline){await bootBackend();} if(!backendOnline)throw new Error('El servidor de TIVA no está disponible en este momento. Espera unos segundos e intenta nuevamente.'); let rr=null,out={}; for(let attempt=1;attempt<=3;attempt++){try{rr=await fetch(API+'/renewal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stored)}); out=await rr.json(); break;}catch(fetchErr){if(attempt===3)throw new Error('No fue posible conectar con el servidor de TIVA. Verifica tu conexión e intenta nuevamente.'); await new Promise(resolve=>setTimeout(resolve,1200*attempt));}} if(!rr?.ok)throw new Error(out.error||'No fue posible registrar la solicitud.'); stored=out.renewal||stored;
       renewals.push(stored); logEvent('Solicitud de renovación',stored,`Plan ${plan==='anual'?'anual':'mensual'} · pago iniciado en Nequi · verificación: hasta 24 horas hábiles`); save();
       const url=paymentLinks[plan];
       $('#renewalSuccess').innerHTML='✅ <b>Solicitud registrada.</b><br><br>Ahora serás llevado a la plataforma de pago de Nequi para completar el pago.<br><br>⏱️ TIVA verificará el pago en un plazo de hasta <b>24 horas hábiles</b>. Los pagos realizados los <b>viernes</b> serán habilitados el <b>lunes hábil</b>, una vez realizada la verificación.';
