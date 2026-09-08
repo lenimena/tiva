@@ -100,9 +100,14 @@ async function bootBackend(){
     if(window.adminAuthenticated){
       const r=await fetch(API+'/state',{cache:'no-store'}); if(!r.ok) throw new Error();
       const st=await r.json(); data=st.data||[]; applications=st.applications||[]; renewals=st.renewals||[]; events=st.events||[]; notifications=st.notifications||[];
-      backendOnline=true; localStorage.setItem(KEY,JSON.stringify(data)); render(); renderV8();
-    } else { backendOnline=true; }
-  }catch(e){ backendOnline=false; window.adminAuthenticated=false; }
+    } else {
+      // Clientes deben cargar los prestadores reales desde PostgreSQL.
+      // Nunca usamos el localStorage como fuente principal del catálogo público.
+      const r=await fetch(API+'/providers',{cache:'no-store'}); if(!r.ok) throw new Error();
+      const st=await r.json(); data=st.providers||[];
+    }
+    backendOnline=true; localStorage.setItem(KEY,JSON.stringify(data)); render(); renderV8();
+  }catch(e){ backendOnline=false; }
   updateBackendBadge();
 }
 function logEvent(action, provider, detail=''){events.push({id:Date.now()+Math.random(),date:new Date().toLocaleString('es-CO'),action,provider:provider?.name||'—',detail});if(events.length>200)events=events.slice(-200);persistV8();}

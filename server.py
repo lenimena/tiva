@@ -185,6 +185,26 @@ class Handler(SimpleHTTPRequestHandler):
         if p=='/api/state':
             if not require_admin(self): return
             return self.send_json(state())
+        if p=='/api/providers':
+            # Catálogo público: solo prestadores activos y no vencidos.
+            # No expone solicitudes, cédulas, fotos documentales ni auditoría.
+            today_value=time.strftime('%Y-%m-%d')
+            providers=[]
+            for x in rows('providers'):
+                if not isinstance(x,dict):
+                    continue
+                expiration=str(x.get('expiration') or '')
+                active=bool(x.get('active')) and (not expiration or expiration >= today_value)
+                if not active:
+                    continue
+                providers.append({
+                    'id':x.get('id'),'name':x.get('name'),'service':x.get('service'),
+                    'city':x.get('city'),'phone':x.get('phone'),'description':x.get('description',''),
+                    'active':True,'expiration':expiration,'exposures':x.get('exposures',0),
+                    'requests':x.get('requests',0),'verified':x.get('verified',False),
+                    'photoUrl':x.get('photoUrl','')
+                })
+            return self.send_json({'providers':providers})
         if p=='/api/services':
             c=db()
             try:
@@ -334,5 +354,5 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_json({'error':'Ruta no encontrada'},404)
 
 if __name__=='__main__':
-    init(); print(f'TIVA V17.4 funcionando en http://localhost:{PORT}')
+    init(); print(f'TIVA V17.6 funcionando en http://localhost:{PORT}')
     ThreadingHTTPServer(('0.0.0.0',PORT),Handler).serve_forever()
