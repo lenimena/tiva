@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: tiva
+    runtime: python
+    buildCommand: ""
+    startCommand: "python server.py"
+    envVars:
+      - key: PRESTADORES_ADMIN_USER
+        sync: false
+      - key: PRESTADORES_ADMIN_PASSWORD
+        sync: false
