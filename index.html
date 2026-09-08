@@ -14,7 +14,6 @@
     <div class="access-grid">
       <button id="customerAccessBtn" class="access-card"><b>🔎 Buscar un servicio</b><span>Encuentra prestadores disponibles</span></button>
       <button id="providerAccessBtn" class="access-card"><b>👤 Soy prestador</b><span>Registrarme y ofrecer mis servicios</span></button>
-      <button id="renewAccessBtn" class="access-card"><b>🔄 Renovar membresía</b><span>Renueva tu plan mensual o anual</span></button>
           </div>
     <div class="trust">✓ 100 servicios disponibles &nbsp; · &nbsp; ✓ Revisión de documentos &nbsp; · &nbsp; ✓ Rotación justa</div>
   </div>
@@ -23,7 +22,6 @@
 <nav class="public-nav" aria-label="Navegación principal">
   <a href="#" id="navAbout">ℹ️ Nosotros</a>
   <a href="#" id="navRules">📋 Reglas de uso</a>
-  <a href="#" id="navRenewal">🔄 Renovar membresía</a>
 </nav>
 
 <section id="aboutView" class="view hidden"><main class="narrow"><section class="card info-page"><span class="eyebrow">NOSOTROS</span><h1>Conectamos personas con servicios</h1><p>TIVA es una plataforma digital que facilita el encuentro entre personas que necesitan un servicio y prestadores independientes disponibles en su ciudad. Nuestro propósito es hacer más sencillo descubrir opciones de servicio y contactar directamente al prestador por WhatsApp, manteniendo una experiencia clara, práctica y ordenada. TIVA no presta ni contrata los servicios ofrecidos: únicamente facilita la conexión entre las partes.</p><button class="primary" id="aboutBack">Volver</button></section></main></section>
@@ -39,27 +37,26 @@
 </main></section>
 
 <section id="renewalView" class="view hidden">
-<header class="topbar"><div><b>Renovación de membresía</b><small>Comprobación de pago TIVA</small></div><button id="renewHomeBtn" class="secondary">← Inicio</button></header>
+<header class="topbar"><div><b>Renovación de membresía</b><small>Pago y verificación TIVA</small></div><button id="renewHomeBtn" class="secondary">← Inicio</button></header>
 <main class="narrow">
-<section class="card intro"><img class="tiva-logo auth-logo" src="tiva-logo.png" alt="TIVA"><span class="eyebrow">RENOVACIÓN</span><h1>Solicita la renovación de tu membresía</h1><p>Completa tus datos, elige tu plan y adjunta el comprobante de pago.</p><div class="renew-warning">⏱️ <b>Importante:</b> la comprobación del pago puede tomar hasta <b>24 horas</b>. Tu perfil volverá a estar activo una vez aprobado el comprobante.</div></section>
+<section class="card intro"><img class="tiva-logo auth-logo" src="tiva-logo.png" alt="TIVA"><span class="eyebrow">RENOVACIÓN</span><h1>Renueva tu membresía TIVA</h1><p>Completa tus datos, elige tu membresía y realiza el pago de forma segura desde la plataforma de pago.</p><div class="renew-warning">⏱️ <b>Importante:</b> TIVA verificará el pago en un plazo de hasta <b>24 horas hábiles</b>. Los pagos realizados los <b>viernes</b> serán habilitados el <b>lunes hábil</b>, una vez realizada la verificación.</div></section>
 <section class="card"><form id="renewalRequestForm" class="form-grid">
 <label>Nombre completo<input name="name" required></label>
 <label>WhatsApp<input name="phone" required placeholder="3001234567"></label>
 <label>Ciudad<select name="city" required><option value="">Selecciona una ciudad</option><option value="Buenaventura">Buenaventura</option></select></label>
 <label>Servicio<select name="service" id="renewalService" required></select></label>
-<label>Plan<select name="plan" id="renewalPlan" required><option value="">Selecciona una membresía</option><option value="mensual">Mensual — $20.000 COP</option><option value="anual">Anual — $100.000 COP</option></select></label>
+<label class="full">Membresía<select name="plan" id="renewalPlan" required><option value="">Selecciona una membresía</option><option value="mensual">Mensual — $20.000 COP</option><option value="anual">Anual — $100.000 COP</option></select></label>
+<div class="full membership-info" id="membershipInfo">
+  <h3>Elige la membresía que más te conviene</h3>
+  <div class="membership-benefits" id="membershipBenefits"><p>Selecciona una opción para conocer brevemente su vigencia y beneficios.</p></div>
+</div>
 <div class="full payment-box" id="membershipPaymentBox">
   <h3>Pago de la membresía</h3>
-  <p id="paymentAmountText">Selecciona una membresía para ver el valor.</p>
-  <a id="paymentLinkBtn" class="primary payment-link disabled" href="#" target="_blank" rel="noopener" aria-disabled="true">Pagar con Nequi</a>
-  <p class="payment-note">Después de realizar el pago, regresa a TIVA y adjunta el comprobante para que administración pueda verificarlo.</p>
+  <p id="paymentAmountText">Selecciona una membresía para continuar.</p>
+  <button id="paymentLinkBtn" class="primary payment-link" type="submit" disabled>Pagar con Nequi</button>
+  <p class="payment-note">Al pulsar <b>Pagar con Nequi</b>, tu solicitud quedará registrada y serás llevado al enlace de pago correspondiente a la membresía seleccionada.</p>
 </div>
-<input type="hidden" name="amount" id="renewalAmount">
-<label>Fecha del pago<input type="date" name="paymentDate" id="renewalPaymentDate" required></label>
-<label>Comprobante <span class="limit">Máx. 5 MB</span><input type="file" name="receipt" id="renewalReceipt" accept="image/*,.pdf" required><small>Adjunta una imagen o PDF legible.</small></label>
-<label class="full">Observaciones<textarea name="notes" rows="4" placeholder="Información adicional, si aplica."></textarea></label>
-<div class="full security-note">🔒 El comprobante se envía para revisión administrativa. <b>El proceso de comprobación toma hasta 24 horas.</b></div>
-<div class="full actions"><button type="button" id="renewalCancel">Cancelar</button><button class="primary" type="submit">Enviar comprobante</button></div>
+<div class="full security-note">🔒 <b>Verificación:</b> TIVA revisará el pago en un plazo de hasta <b>24 horas hábiles</b>. Los pagos realizados los <b>viernes</b> serán habilitados el <b>lunes hábil</b>, después de su verificación.</div>
 </form><div id="renewalSuccess" class="success-box hidden"></div></section>
 </main></section>
 

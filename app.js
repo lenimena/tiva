@@ -123,15 +123,15 @@ Para envío real conectaremos WhatsApp Business Platform.`);}
 
 fillServices();normalizeApplications();render();renderV8();updateBackendBadge();bootBackend();setInterval(()=>{render();renderV8()},60000);
 
-// V14 — Renovación con comprobante y revisión administrativa
+// V18.2 — Renovación mediante Link de Pago Nequi, sin comprobantes
 function renewalUrl(){ return window.location.origin + window.location.pathname + '?renovar=1'; }
-function renewalMessage(x){ return `🔴 Tu membresía TIVA ha vencido\n\nHola ${x.name}, tu membresía se encuentra vencida y tu perfil actualmente no aparece en las búsquedas de clientes.\n\n🔄 Renueva tu membresía aquí:\n${renewalUrl()}\n\nCompleta tus datos y adjunta el comprobante de pago.\n\n⏱️ IMPORTANTE: el proceso de comprobación toma hasta 24 horas. Tu perfil volverá a estar activo una vez aprobado el comprobante.\n\nGracias por continuar siendo parte de TIVA.`; }
-function openRenewal(){ showView('renewal'); $('#renewalPaymentDate').value=today(); $('#renewalSuccess').classList.add('hidden'); window.scrollTo(0,0); }
+function renewalMessage(x){ return `🔴 Tu membresía TIVA ha vencido\n\nHola ${x.name}, tu membresía se encuentra vencida y tu perfil actualmente no aparece en las búsquedas de clientes.\n\n🔄 Renueva tu membresía aquí:\n${renewalUrl()}\n\nElige tu plan y realiza el pago desde el enlace de Nequi.\n\n⏱️ IMPORTANTE: TIVA verificará el pago en un plazo de hasta 24 horas hábiles. Los pagos realizados los viernes serán habilitados el lunes hábil, una vez realizada la verificación.\n\nGracias por continuar siendo parte de TIVA.`; }
+function openRenewal(){ showView('renewal'); $('#renewalSuccess').classList.add('hidden'); window.scrollTo(0,0); }
 function renderRenewalRequests(){
   const body=$('#renewalRequestsBody'), badge=$('#renewalPendingBadge'); if(!body)return;
-  const pending=renewals.filter(r=>r.status==='pendiente_comprobacion');
+  const pending=renewals.filter(r=>r.status==='pendiente_verificacion');
   badge.textContent=`${pending.length} pendiente${pending.length===1?'':'s'}`;
-  body.innerHTML=pending.slice().reverse().map(r=>`<tr><td>${esc(r.createdAt||r.date||'')}</td><td><b>${esc(r.name||r.providerName||'')}</b><br><small>${esc(r.phone||'')}</small></td><td>${r.plan==='anual'?'Anual':'Mensual'}</td><td>${esc(r.amount||'')}<br><small>${esc(r.paymentDate||'')}</small></td><td>${r.receiptPath?`<a class="secondary" target="_blank" href="/api/receipt?path=${encodeURIComponent(r.receiptPath)}">📎 Ver comprobante</a>`:'Sin archivo'}</td><td><span class="status bad">Pendiente</span></td><td><div class="review-actions"><button class="primary" onclick="approveRenewal(${JSON.stringify(r.id)})">✅ Aprobar</button><button class="renew" onclick="rejectRenewal(${JSON.stringify(r.id)})">❌ Rechazar</button></div></td></tr>`).join('')||'<tr><td colspan="7">No hay solicitudes de renovación pendientes.</td></tr>';
+  body.innerHTML=pending.slice().reverse().map(r=>`<tr><td>${esc(r.createdAt||r.date||'')}</td><td><b>${esc(r.name||r.providerName||'')}</b><br><small>${esc(r.phone||'')}</small><br><small>${esc(r.city||'')} · ${esc(r.service||'')}</small></td><td>${r.plan==='anual'?'Anual':'Mensual'}</td><td><b>${r.plan==='anual'?'$100.000 COP':'$20.000 COP'}</b><br><small>Nequi · Link de pago</small></td><td><span class="status bad">Pendiente de verificación</span></td><td><div class="review-actions"><button class="primary" onclick="approveRenewal(${JSON.stringify(r.id)})">✅ Aprobar</button><button class="renew" onclick="rejectRenewal(${JSON.stringify(r.id)})">❌ Rechazar</button></div></td></tr>`).join('')||'<tr><td colspan="6">No hay solicitudes de renovación pendientes.</td></tr>';
 }
 function approveRenewal(id){
   const r=renewals.find(x=>String(x.id)===String(id)); if(!r)return;
@@ -140,46 +140,59 @@ function approveRenewal(id){
   const start=expired(x)?today():(x.expiration||today()); const plan=r.plan||'mensual'; const exp=addMonths(start,monthsFor(plan));
   x.plan=plan; x.registration=start; x.expiration=exp; x.active=true; x.autoExpired=false;
   r.status='aprobada'; r.approvedAt=new Date().toLocaleString('es-CO'); r.providerId=x.id; r.providerName=x.name; r.start=start; r.expiration=exp;
-  const history={id:Date.now()+Math.random(),providerId:x.id,providerName:x.name,plan,start,expiration:exp,date:today(),amount:r.amount||'',paymentDate:r.paymentDate||'',paymentMethod:r.paymentMethod||'',source:'Solicitud con comprobante'};
+  const history={id:Date.now()+Math.random(),providerId:x.id,providerName:x.name,plan,start,expiration:exp,date:today(),amount:r.amount||'',paymentMethod:'Nequi / Link de pago TIVA',source:'Pago verificado manualmente en Nequi'};
   renewals.push(history);
-  logEvent('Renovación aprobada',x,`Pago comprobado · ${plan} · nuevo vencimiento ${exp}`);
-  notifyWhatsApp(x,'Renovación aprobada',`🎉 ¡Renovación confirmada!\n\nHola ${x.name}, tu pago fue comprobado correctamente.\n\n✅ Estado: ACTIVO\n📋 Plan: ${plan==='anual'?'Anual':'Mensual'}\n📅 Inicio: ${start}\n📅 Nueva fecha de vencimiento: ${exp}\n\nGracias por continuar siendo parte de TIVA. 🚀`);
+  logEvent('Renovación aprobada',x,`Pago verificado en Nequi · ${plan} · nuevo vencimiento ${exp}`);
+  notifyWhatsApp(x,'Renovación aprobada',`🎉 ¡Renovación confirmada!\n\nHola ${x.name}, tu pago fue verificado correctamente.\n\n✅ Estado: ACTIVO\n📋 Plan: ${plan==='anual'?'Anual':'Mensual'}\n📅 Inicio: ${start}\n📅 Nueva fecha de vencimiento: ${exp}\n\nGracias por continuar siendo parte de TIVA. 🚀`);
   save(); render(); renderV8(); renderRenewalRequests(); alert('Pago aprobado. El prestador quedó activo y se preparó la notificación de renovación.');
 }
 function rejectRenewal(id){
-  const r=renewals.find(x=>String(x.id)===String(id)); if(!r)return; const reason=prompt('Motivo del rechazo del comprobante:','No fue posible comprobar el pago.'); if(reason===null)return;
+  const r=renewals.find(x=>String(x.id)===String(id)); if(!r)return; const reason=prompt('Motivo del rechazo del pago:','No fue posible verificar el pago en Nequi.'); if(reason===null)return;
   r.status='rechazada'; r.rejectedAt=new Date().toLocaleString('es-CO'); r.rejectionReason=reason||'No especificado';
   const x=data.find(p=>normalizePhoneForWa(p.phone)===normalizePhoneForWa(r.phone)) || {name:r.name,phone:r.phone};
   logEvent('Renovación rechazada',x,`Motivo: ${r.rejectionReason}`);
-  notifyWhatsApp(x,'Comprobante rechazado',`⚠️ Hola ${r.name||x.name}, no pudimos validar tu comprobante de pago.\n\nMotivo: ${r.rejectionReason}\n\nPuedes enviar nuevamente tu solicitud de renovación aquí:\n${renewalUrl()}\n\n⏱️ La comprobación de cada solicitud puede tomar hasta 24 horas.`);
+  notifyWhatsApp(x,'Pago no verificado',`⚠️ Hola ${r.name||x.name}, no pudimos verificar tu pago.\n\nMotivo: ${r.rejectionReason}\n\nPuedes volver a solicitar la renovación aquí:\n${renewalUrl()}\n\n⏱️ TIVA verifica los pagos en un plazo de hasta 24 horas hábiles. Los pagos realizados los viernes serán habilitados el lunes hábil, una vez verificados.`);
   save(); renderV8(); renderRenewalRequests(); alert('Solicitud rechazada y notificación preparada para WhatsApp.');
 }
-function initV14(){
+function initV18_2(){
   const rs=$('#renewalService'); if(rs) rs.innerHTML='<option value="">Selecciona un servicio</option>'+SERVICES.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  const planSelect=$('#renewalPlan'), amountInput=$('#renewalAmount'), paymentText=$('#paymentAmountText'), paymentBtn=$('#paymentLinkBtn');
+  const planSelect=$('#renewalPlan'), paymentText=$('#paymentAmountText'), paymentBtn=$('#paymentLinkBtn'), benefits=$('#membershipBenefits');
   const paymentLinks={mensual:'https://checkout.nequi.wompi.co/l/svhoxW',anual:'https://checkout.nequi.wompi.co/method'};
   const paymentAmounts={mensual:'20000',anual:'100000'};
+  const benefitText={
+    mensual:'Vigencia de 30 días. Mantén tu perfil activo en TIVA, visible para clientes y disponible para recibir contactos por WhatsApp durante el período de la membresía.',
+    anual:'Vigencia de 12 meses. Mantén tu perfil activo durante todo el año y ahorra frente al pago mensual. Ideal si quieres permanecer en TIVA sin renovar cada mes.'
+  };
   function syncPaymentLink(){
-    const plan=planSelect?.value||''; const amount=paymentAmounts[plan]||'';
-    if(amountInput) amountInput.value=amount;
-    if(paymentText) paymentText.innerHTML=plan==='mensual'?'Membresía mensual: <b>$20.000 COP</b>':plan==='anual'?'Membresía anual: <b>$100.000 COP</b>':'Selecciona una membresía para ver el valor.';
-    if(paymentBtn){ const url=paymentLinks[plan]; paymentBtn.href=url||'#'; paymentBtn.classList.toggle('disabled',!url); paymentBtn.setAttribute('aria-disabled',url?'false':'true'); paymentBtn.textContent=url?`Pagar ${plan==='anual'?'$100.000':'$20.000'} con Nequi`:'Pagar con Nequi'; }
+    const plan=planSelect?.value||'';
+    if(paymentText) paymentText.innerHTML=plan==='mensual'?'Membresía mensual: <b>$20.000 COP</b>':plan==='anual'?'Membresía anual: <b>$100.000 COP</b>':'Selecciona una membresía para continuar.';
+    if(benefits) benefits.innerHTML=plan&&benefitText[plan]?`<p><b>${plan==='anual'?'⭐ Membresía anual':'🟢 Membresía mensual'}</b></p><p>${benefitText[plan]}</p>`:'<p>Selecciona una opción para conocer brevemente su vigencia y beneficios.</p>';
+    if(paymentBtn){ paymentBtn.disabled=!paymentLinks[plan]; paymentBtn.textContent=paymentLinks[plan]?`Pagar ${plan==='anual'?'$100.000':'$20.000'} con Nequi`:'Pagar con Nequi'; }
   }
   planSelect?.addEventListener('change',syncPaymentLink); syncPaymentLink();
-  $('#renewAccessBtn')?.addEventListener('click',openRenewal); $('#renewHomeBtn')?.addEventListener('click',()=>showView('landing')); $('#renewalCancel')?.addEventListener('click',()=>showView('landing'));
+  $('#renewAccessBtn')?.addEventListener('click',openRenewal); $('#renewHomeBtn')?.addEventListener('click',()=>showView('landing'));
   $('#renewalRequestForm')?.addEventListener('submit',async e=>{
-    e.preventDefault(); const f=new FormData(e.target), file=f.get('receipt'), plan=f.get('plan');
-    const expectedAmounts={mensual:'20000',anual:'100000'};
-    if(!expectedAmounts[plan]){alert('Selecciona una membresía válida.');return}
-    if(String(f.get('amount')||'')!==expectedAmounts[plan]){alert('El valor de la membresía no es válido.');return}
-    if(!file||!file.size){alert('Adjunta el comprobante de pago.');return} if(file.size>5*1024*1024){alert('El comprobante debe pesar máximo 5 MB.');return}
-    const reader=new FileReader(); reader.onload=async()=>{if(!CITIES.includes(String(f.get('city')||'')))return alert('Selecciona una ciudad válida.');const request={id:Date.now()+Math.random(),createdAt:new Date().toLocaleString('es-CO'),name:f.get('name').trim(),phone:f.get('phone').trim(),city:f.get('city').trim(),service:f.get('service'),plan,amount:expectedAmounts[plan],paymentDate:f.get('paymentDate'),notes:f.get('notes').trim(),receiptName:file.name,receiptSize:file.size,status:'pendiente_comprobacion',receiptData:reader.result,paymentMethod:'Nequi / Link de pago TIVA'};
-      try{let stored={...request}; if(backendOnline){const rr=await fetch(API+'/renewal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stored)}); if(!rr.ok)throw new Error(); const out=await rr.json(); stored=out.renewal||stored;} delete stored.receiptData; renewals.push(stored); logEvent('Solicitud de renovación',stored,'Comprobante recibido para comprobación · plazo informado: hasta 24 horas'); save(); e.target.reset(); $('#renewalPaymentDate').value=today(); $('#renewalSuccess').innerHTML='✅ <b>Solicitud enviada correctamente.</b><br><br>Tu comprobante quedó pendiente de comprobación. <b>El proceso puede tomar hasta 24 horas.</b><br><br>Conserva este aviso mientras TIVA revisa el pago.'; $('#renewalSuccess').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'});
-      }catch(err){alert('No fue posible enviar el comprobante. Verifica que el servidor esté disponible e intenta nuevamente.')}}; reader.readAsDataURL(file);
+    e.preventDefault();
+    const f=new FormData(e.target), plan=f.get('plan'), expectedAmounts={mensual:'20000',anual:'100000'};
+    if(!expectedAmounts[plan]){alert('Selecciona una membresía válida.');return;}
+    if(!CITIES.includes(String(f.get('city')||''))){alert('Selecciona una ciudad válida.');return;}
+    const request={id:Date.now()+Math.random(),createdAt:new Date().toLocaleString('es-CO'),name:String(f.get('name')||'').trim(),phone:String(f.get('phone')||'').trim(),city:String(f.get('city')||'').trim(),service:String(f.get('service')||''),plan,amount:expectedAmounts[plan],status:'pendiente_verificacion',paymentMethod:'Nequi / Link de pago TIVA'};
+    if(!request.name||!request.phone||!request.service){alert('Completa todos los datos requeridos.');return;}
+    try{
+      let stored={...request};
+      if(backendOnline){const rr=await fetch(API+'/renewal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stored)}); if(!rr.ok)throw new Error(); const out=await rr.json(); stored=out.renewal||stored;}
+      renewals.push(stored); logEvent('Solicitud de renovación',stored,`Plan ${plan==='anual'?'anual':'mensual'} · pago iniciado en Nequi · verificación: hasta 24 horas hábiles`); save();
+      const url=paymentLinks[plan];
+      $('#renewalSuccess').innerHTML='✅ <b>Solicitud registrada.</b><br><br>Ahora serás llevado a la plataforma de pago de Nequi para completar el pago.<br><br>⏱️ TIVA verificará el pago en un plazo de hasta <b>24 horas hábiles</b>. Los pagos realizados los <b>viernes</b> serán habilitados el <b>lunes hábil</b>, una vez realizada la verificación.';
+      $('#renewalSuccess').classList.remove('hidden');
+      setTimeout(()=>{window.location.href=url;},250);
+    }catch(err){alert('No fue posible registrar la solicitud. Verifica que el servidor esté disponible e intenta nuevamente.');}
   });
   const oldRender=render; window.render=()=>{oldRender();renderRenewalRequests();};
   renderRenewalRequests();
   if(new URLSearchParams(location.search).get('renovar')==='1') setTimeout(openRenewal,50);
 }
+initV18_2();
+
 initV14();
 if(document.body.classList.contains('admin-page') || $('#adminView')){ setTimeout(()=>showView('admin'),0); }

@@ -163,25 +163,6 @@ class Handler(SimpleHTTPRequestHandler):
             finally: c.close()
             if not row: return self.send_json({'error':'Foto no encontrada'},404)
             self.send_response(200); self.send_header('Content-Type',mime); self.send_header('Cache-Control','public, max-age=3600'); self.send_header('Content-Length',str(len(raw))); self.end_headers(); self.wfile.write(raw); return
-        if p=='/api/receipt':
-            if not require_admin(self): return
-            from urllib.parse import parse_qs
-            q=parse_qs(urlparse(self.path).query); rel=q.get('path',[''])[0]
-            if not rel.startswith('receipts/') or '..' in rel or '/' not in rel:
-                return self.send_json({'error':'Comprobante no válido'},400)
-            fname=os.path.basename(rel)
-            if USE_POSTGRES:
-                c=db()
-                try:
-                    cur=c.cursor(); cur.execute('SELECT mime,data FROM receipts WHERE path=%s',(rel,)); row=cur.fetchone()
-                finally: c.close()
-                if not row: return self.send_json({'error':'Comprobante no encontrado'},404)
-                mime=row['mime']; raw=bytes(row['data'])
-            else:
-                fpath=os.path.join(RECEIPTS_DIR,fname)
-                if not os.path.isfile(fpath): return self.send_json({'error':'Comprobante no encontrado'},404)
-                mime=mimetypes.guess_type(fpath)[0] or 'application/octet-stream'; raw=open(fpath,'rb').read()
-            self.send_response(200); self.send_header('Content-Type',mime); self.send_header('Content-Length',str(len(raw))); self.send_header('Content-Disposition',f'inline; filename="{fname}"'); self.end_headers(); self.wfile.write(raw); return
         if p=='/api/state':
             if not require_admin(self): return
             return self.send_json(state())
@@ -320,31 +301,19 @@ class Handler(SimpleHTTPRequestHandler):
             finally: c.close()
             return self.send_json({'ok':True,'application':body})
         if p=='/api/renewal':
-            # Public renewal request. Receipt is written outside the database and only metadata/path is stored in SQLite.
-            receipt=body.pop('receiptData',None)
-            if receipt:
-                import base64
-                try:
-                    header,encoded=receipt.split(',',1)
-                    raw=base64.b64decode(encoded, validate=True)
-                    if len(raw)>5*1024*1024: return self.send_json({'error':'El comprobante supera 5 MB'},400)
-                    ext='.bin'
-                    mime=header.split(';')[0].replace('data:','')
-                    ext=mimetypes.guess_extension(mime) or '.bin'
-                    fname=f"renovacion_{int(time.time()*1000)}_{secrets.token_hex(4)}{ext}"
-                    rel='receipts/'+fname
-                    if USE_POSTGRES:
-                        c=db()
-                        try:
-                            cur=c.cursor(); cur.execute('INSERT INTO receipts(path,mime,data) VALUES(%s,%s,%s) ON CONFLICT (path) DO UPDATE SET mime=EXCLUDED.mime,data=EXCLUDED.data',(rel,mime,psycopg2.Binary(raw))); c.commit()
-                        finally: c.close()
-                    else:
-                        fpath=os.path.join(RECEIPTS_DIR,fname)
-                        with open(fpath,'wb') as fh: fh.write(raw)
-                    body['receiptPath']=rel
-                except Exception:
-                    return self.send_json({'error':'Comprobante inválido'},400)
-            arr=rows('renewals'); body.setdefault('status','pendiente_comprobacion'); body.setdefault('createdAt',time.strftime('%Y-%m-%d %H:%M:%S')); arr.append(body); replace('renewals',arr[-500:])
+            # Public renewal request. No payment receipt is uploaded or stored.
+            # The administrator verifies the payment directly in Nequi Negocios.
+            allowed_plans={'mensual':'20000','anual':'100000'}
+            plan=str(body.get('plan') or '')
+            if plan not in allowed_plans:
+                return self.send_json({'error':'Membresía no válida'},400)
+            body['amount']=allowed_plans[plan]
+            body['status']='pendiente_verificacion'
+            body.setdefault('createdAt',time.strftime('%Y-%m-%d %H:%M:%S'))
+            body['paymentMethod']='Nequi / Link de pago TIVA'
+            for k in ('receiptData','receiptPath','receiptName','receiptSize','notes','paymentDate'):
+                body.pop(k,None)
+            arr=rows('renewals'); arr.append(body); replace('renewals',arr[-500:])
             return self.send_json({'ok':True,'renewal':body})
         if p=='/api/state':
             if not require_admin(self): return
