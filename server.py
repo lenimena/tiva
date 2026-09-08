@@ -113,7 +113,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Headers','Content-Type'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS'); self.end_headers()
     def do_GET(self):
         p=urlparse(self.path).path
-        if p=='/api/health': return self.send_json({'ok':True,'version':'V17','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
+        if p=='/api/health': return self.send_json({'ok':True,'version':'V17.2','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
         if p=='/api/session': return self.send_json({'authenticated':is_admin(self),'user':ADMIN_USER if is_admin(self) else None})
         if p=='/api/application-file':
             if not require_admin(self): return
@@ -214,32 +214,77 @@ class Handler(SimpleHTTPRequestHandler):
         if p=='/api/contact':
             arr=rows('events'); arr.append({'id':time.time(),'date':time.strftime('%Y-%m-%d %H:%M:%S'),'action':'Aceptación de condiciones','provider':body.get('providerName','—'),'detail':f"Usuario aceptó {body.get('termsVersion','TIVA-CONEXION-v1.0')}; contacto por WhatsApp"}); replace('events',arr[-500:]); return self.send_json({'ok':True})
         if p=='/api/application':
-            aid=str(body.get('id') or int(time.time()*1000)); files=[]
-            for kind in ('idDoc','photo'):
-                encoded=body.pop(kind+'Data',None)
-                if not encoded: return self.send_json({'error':f'Falta el archivo {kind}'},400)
-                try:
-                    header,b64=encoded.split(',',1); raw=base64.b64decode(b64,validate=True)
-                    if len(raw)>2*1024*1024: return self.send_json({'error':'Cada documento debe pesar máximo 2 MB'},400)
-                    mime=header.split(';')[0].replace('data:','') or 'application/octet-stream'; filename=str(body.get(kind+'Name') or (kind+'.bin')); files.append((kind,filename,mime,raw))
-                except Exception: return self.send_json({'error':f'Archivo {kind} inválido'},400)
-            body['id']=aid; body['documentStatus']='recibida_para_revision'; body['documentsStored']=True
+            # La solicitud se crea primero con metadata. Los archivos se suben
+            # por separado para evitar enviar dos archivos de hasta 2 MB dentro
+            # de un único JSON/base64 (que puede superar los límites del proxy).
+            aid=str(body.get('id') or int(time.time()*1000))
+            for key in ('idDocData','photoData'):
+                body.pop(key,None)
+            body['id']=aid
+            body['status']='subiendo_documentos'
+            body['documentStatus']='esperando_documentos'
+            body['documentsStored']=False
+            body['idDocAvailable']=False
+            body['photoAvailable']=False
             c=db()
             try:
                 cur=c.cursor()
                 if USE_POSTGRES:
-                    cur.execute('DELETE FROM application_files WHERE application_id=%s',(aid,))
-                    for kind,filename,mime,raw in files: cur.execute('INSERT INTO application_files(id,application_id,kind,filename,mime,data) VALUES(%s,%s,%s,%s,%s,%s)',(secrets.token_hex(16),aid,kind,filename,mime,psycopg2.Binary(raw)))
                     cur.execute('INSERT INTO applications(id,data) VALUES(%s,%s) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',(aid,json.dumps(body,ensure_ascii=False)))
                 else:
-                    d=os.path.join(ROOT,'private_documents'); os.makedirs(d,exist_ok=True)
-                    for kind,filename,mime,raw in files:
-                        safe=f'{aid}_{kind}_{secrets.token_hex(4)}_{os.path.basename(filename)}'; open(os.path.join(d,safe),'wb').write(raw); body[kind+'Path']='private_documents/'+safe
                     cur.execute('INSERT OR REPLACE INTO applications(id,data) VALUES(?,?)',(int(float(aid)) if aid.replace('.','',1).isdigit() else int(time.time()*1000),json.dumps(body,ensure_ascii=False)))
                 c.commit()
             finally: c.close()
-            for kind,_,_,_ in files: body[kind+'Available']=True; body[kind+'Url']=f'/api/application-file?application_id={aid}&kind={kind}'
             return self.send_json({'ok':True,'application':body})
+        if p=='/api/application-file-upload':
+            # Cada archivo viaja como bytes en una petición independiente.
+            aid=str(self.headers.get('X-Application-Id','')).strip()
+            kind=str(self.headers.get('X-File-Kind','')).strip()
+            filename=str(self.headers.get('X-File-Name','')).strip()
+            if not aid or kind not in ('idDoc','photo') or not filename:
+                return self.send_json({'error':'Datos de archivo incompletos'},400)
+            length=int(self.headers.get('Content-Length','0'))
+            if length<=0: return self.send_json({'error':'El archivo está vacío'},400)
+            if length>2*1024*1024: return self.send_json({'error':'Cada documento debe pesar máximo 2 MB'},400)
+            raw=self.rfile.read(length)
+            if len(raw)!=length: return self.send_json({'error':'No fue posible recibir el archivo completo'},400)
+            from urllib.parse import unquote
+            filename=os.path.basename(unquote(filename)).replace('\"','_') or (kind+'.bin')
+            mime=self.headers.get('Content-Type','application/octet-stream').split(';')[0].strip() or 'application/octet-stream'
+            c=db()
+            try:
+                cur=c.cursor()
+                if USE_POSTGRES:
+                    cur.execute('SELECT data FROM applications WHERE id=%s',(aid,)); row=cur.fetchone()
+                    if not row: return self.send_json({'error':'Solicitud no encontrada'},404)
+                    cur.execute('DELETE FROM application_files WHERE application_id=%s AND kind=%s',(aid,kind))
+                    cur.execute('INSERT INTO application_files(id,application_id,kind,filename,mime,data) VALUES(%s,%s,%s,%s,%s,%s)',(secrets.token_hex(16),aid,kind,filename,mime,psycopg2.Binary(raw)))
+                    app=json.loads(row['data'] if isinstance(row,dict) else row[0])
+                else:
+                    ident=int(float(aid)) if aid.replace('.','',1).isdigit() else -1
+                    cur.execute('SELECT data FROM applications WHERE id=?',(ident,)); row=cur.fetchone()
+                    if not row: return self.send_json({'error':'Solicitud no encontrada'},404)
+                    app=json.loads(row['data'] if isinstance(row,dict) else row[0])
+                    d=os.path.join(ROOT,'private_documents'); os.makedirs(d,exist_ok=True)
+                    safe=f'{aid}_{kind}_{secrets.token_hex(4)}_{filename}'; open(os.path.join(d,safe),'wb').write(raw); app[kind+'Path']='private_documents/'+safe
+                app[kind+'Available']=True
+                app[kind+'Name']=filename
+                app[kind+'Size']=length
+                app[kind+'Url']=f'/api/application-file?application_id={aid}&kind={kind}'
+                if app.get('idDocAvailable') and app.get('photoAvailable'):
+                    app['status']='pendiente'
+                    app['documentStatus']='recibida_para_revision'
+                    app['documentsStored']=True
+                if USE_POSTGRES:
+                    cur.execute('UPDATE applications SET data=%s WHERE id=%s',(json.dumps(app,ensure_ascii=False),aid))
+                else:
+                    cur.execute('UPDATE applications SET data=? WHERE id=?',(json.dumps(app,ensure_ascii=False),ident))
+                c.commit()
+            except Exception:
+                c.rollback()
+                raise
+            finally: c.close()
+            return self.send_json({'ok':True,'application':app,'kind':kind,'size':length})
         if p=='/api/renewal':
             # Public renewal request. Receipt is written outside the database and only metadata/path is stored in SQLite.
             receipt=body.pop('receiptData',None)
@@ -284,5 +329,5 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_json({'error':'Ruta no encontrada'},404)
 
 if __name__=='__main__':
-    init(); print(f'TIVA V17 funcionando en http://localhost:{PORT}')
+    init(); print(f'TIVA V17.2 funcionando en http://localhost:{PORT}')
     ThreadingHTTPServer(('0.0.0.0',PORT),Handler).serve_forever()

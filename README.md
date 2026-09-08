@@ -1,6 +1,6 @@
-# TIVA V17 — Render + PostgreSQL
+# TIVA V17.2 — Render + PostgreSQL
 
-TIVA V17 está preparada para Render con PostgreSQL. Si existe `DATABASE_URL`, usa PostgreSQL; en local, si no existe, mantiene SQLite para desarrollo.
+TIVA V17.2 está preparada para Render con PostgreSQL. Si existe `DATABASE_URL`, usa PostgreSQL; en local, si no existe, mantiene SQLite para desarrollo.
 
 ## Render
 1. Crear un Render Postgres en la misma región del Web Service.
