@@ -68,7 +68,7 @@
       <label class="full">Descripción de tu servicio<textarea name="description" rows="4" placeholder="Experiencia, zona de atención, horarios, etc."></textarea></label>
       <label>Copia de cédula <span class="limit">Máx. 2 MB</span><input type="file" name="idDoc" id="idDoc" accept="image/*,.pdf" required><small>Se usa únicamente para revisión de la solicitud.</small></label>
       <label>Foto de perfil <span class="limit">Máx. 2 MB</span><input type="file" name="photo" id="photo" accept="image/*" required><small>Foto clara para identificar al prestador.</small></label>
-      <div class="full security-note">🔒 <b>Protección de documentos:</b> esta versión es un prototipo. Los archivos reales no se guardan en el navegador; solo se registra su nombre y tamaño para simular la recepción. En producción se deben enviar a almacenamiento privado mediante HTTPS.</div>
+      <div class="full security-note">🔒 <b>Protección de documentos:</b> los archivos se envían directamente al servidor para revisión administrativa. La cédula queda restringida al administrador; si la solicitud es aprobada, la foto enviada se asociará al perfil del prestador.</div>
       <div class="full actions"><button type="button" id="registerBack">Cancelar</button><button class="primary">Enviar solicitud</button></div>
     </form>
   </section>
