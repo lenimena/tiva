@@ -32,7 +32,7 @@
 <header class="topbar"><div><b>Buscar servicios</b><small>Encuentra prestadores disponibles cerca de ti</small></div><button id="customerHomeBtn" class="secondary">← Inicio</button></header>
 <main class="narrow">
 <section class="card intro"><span class="eyebrow">ENCUENTRA UN SERVICIO</span><h1>¿Qué necesitas?</h1><p>Selecciona la ciudad y el servicio. TIVA te mostrará al menos 5 prestadores disponibles cuando existan suficientes perfiles.</p></section>
-<section class="card"><form id="searchServiceForm" class="form-grid"><label>Ciudad<input id="customerCity" required placeholder="Ej. Buenaventura"></label><label>Servicio<select id="customerService" required></select></label><label class="full">Describe brevemente lo que necesitas<textarea id="customerDescription" rows="3" placeholder="Ej. Necesito reparar una fuga de agua..."></textarea></label><div class="full actions"><button class="primary" type="submit">Buscar prestadores</button></div></form></section>
+<section class="card"><form id="searchServiceForm" class="form-grid"><label>Ciudad<select id="customerCity" required><option value="">Selecciona una ciudad</option><option value="Buenaventura">Buenaventura</option></select></label><label>Servicio<select id="customerService" required></select></label><label class="full">Describe brevemente lo que necesitas<textarea id="customerDescription" rows="3" placeholder="Ej. Necesito reparar una fuga de agua..."></textarea></label><div class="full actions"><button class="primary" type="submit">Buscar prestadores</button></div></form></section>
 <section id="customerResults" class="card hidden"><div class="section-title"><div><h2>Prestadores disponibles</h2><p id="resultsSummary"></p></div><span class="badge" id="resultsCount"></span></div><div id="providerCards" class="provider-cards"></div></section>
 </main></section>
 
@@ -43,7 +43,7 @@
 <section class="card"><form id="renewalRequestForm" class="form-grid">
 <label>Nombre completo<input name="name" required></label>
 <label>WhatsApp<input name="phone" required placeholder="3001234567"></label>
-<label>Ciudad<input name="city" required></label>
+<label>Ciudad<select name="city" required><option value="">Selecciona una ciudad</option><option value="Buenaventura">Buenaventura</option></select></label>
 <label>Servicio<select name="service" id="renewalService" required></select></label>
 <label>Plan<select name="plan" required><option value="mensual">Mensual</option><option value="anual">Anual</option></select></label>
 <label>Valor pagado<input name="amount" required placeholder="Ej. 50000"></label>
@@ -63,7 +63,7 @@
     <form id="registerForm" class="form-grid">
       <label>Nombre completo<input name="name" required placeholder="Ej. Juan Pérez"></label>
       <label>Servicio<select name="service" id="registerService" required></select></label>
-      <label>Ciudad<input name="city" required placeholder="Ej. Buenaventura"></label>
+      <label>Ciudad<select name="city" required><option value="">Selecciona una ciudad</option><option value="Buenaventura">Buenaventura</option></select></label>
       <label>WhatsApp<input name="phone" required placeholder="Ej. 3001234567"></label>
       <label class="full">Descripción de tu servicio<textarea name="description" rows="4" placeholder="Experiencia, zona de atención, horarios, etc."></textarea></label>
       <label>Copia de cédula <span class="limit">Máx. 2 MB</span><input type="file" name="idDoc" id="idDoc" accept="image/*,.pdf" required><small>Se usa únicamente para revisión de la solicitud.</small></label>

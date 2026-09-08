@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-import json, os, sqlite3, mimetypes, hashlib, secrets, time
+import json, os, sqlite3, mimetypes, hashlib, secrets, time, base64
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 
 ROOT=os.path.dirname(os.path.abspath(__file__))
 DB=os.path.join(ROOT,'prestadores_v9.db')
 PORT=int(os.environ.get('PORT','8000'))
+DATABASE_URL=os.environ.get('DATABASE_URL','').strip()
+USE_POSTGRES=bool(DATABASE_URL)
+if USE_POSTGRES:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
 SESSIONS={}
 RECEIPTS_DIR=os.path.join(ROOT,'receipts')
 os.makedirs(RECEIPTS_DIR, exist_ok=True)
@@ -14,12 +19,25 @@ ADMIN_PASSWORD=os.environ.get('PRESTADORES_ADMIN_PASSWORD','Admin123!')
 SERVICES=['Aire acondicionado','Albañilería','Animación de eventos','Armado de muebles','Asesoría contable','Asesoría jurídica','Asesoría informática','Asistencia virtual','Barbería a domicilio','Cuidado de adultos mayores','Cuidado de mascotas','Cuidado de niños','Cerrajería','Clases de idiomas','Clases de música','Clases de matemáticas','Clases de refuerzo escolar','Coaching personal','Community manager','Confección de ropa','Construcción','Consultoría empresarial','Cocina a domicilio','Decoración de eventos','Diseño gráfico','Diseño web','Electricidad','Enfermería a domicilio','Entrenador personal','Estilismo','Fotografía','Fumigación','Gasfitería / plomería','Gestión de redes sociales','Instalación de cámaras','Instalación de pisos','Instalación de vidrios','Instalación de drywall','Instalación de internet','Jardinería','Lavado de autos','Lavado de muebles','Lavandería','Limpieza de casas','Limpieza de oficinas','Limpieza de vidrios','Manicure y pedicure','Maquillaje profesional','Masajes','Mantenimiento de computadores','Mantenimiento de celulares','Mantenimiento de electrodomésticos','Mantenimiento de piscinas','Mantenimiento de motos','Mantenimiento de bicicletas','Mantenimiento de aires acondicionados','Mensajería','Mudanzas','Niñera','Nutrición','Organización de eventos','Organización de espacios','Panadería y repostería','Peluquería a domicilio','Pintura de interiores','Pintura de exteriores','Plomería','Podología','Reparación de calzado','Reparación de electrodomésticos','Reparación de computadores','Reparación de celulares','Reparación de muebles','Reparación de motos','Reparación de bicicletas','Reparación de puertas','Reparación de ventanas','Reparación de lavadoras','Reparación de neveras','Reparación de televisores','Reparación de ventiladores','Reparación de herramientas','Reparación de instrumentos musicales','Reparación de relojes','Reparación de joyería','Secretaría / digitación','Seguridad privada','Servicio de catering','Servicio de mesero','Soporte técnico','Tapicería','Tatuaje y piercing','Traducción','Transporte particular','Transporte de carga','Tutorías académicas','Venta de comida preparada','Video y edición','Visagismo de cejas','Costura y arreglos']
 
 def db():
-    c=sqlite3.connect(DB)
-    c.row_factory=sqlite3.Row
-    return c
+    if USE_POSTGRES:
+        return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 
 def init():
-    c=db(); c.executescript('''
+    c=db()
+    if USE_POSTGRES:
+        cur=c.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS providers(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS renewals(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS services(id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        cur.execute("CREATE TABLE IF NOT EXISTS receipts(path TEXT PRIMARY KEY, mime TEXT NOT NULL, data BYTEA NOT NULL)")
+        for i,s in enumerate(SERVICES,1): cur.execute('INSERT INTO services(id,name) VALUES(%s,%s) ON CONFLICT (id) DO NOTHING',(str(i),s))
+        c.commit(); c.close(); return
+    c.executescript('''
     CREATE TABLE IF NOT EXISTS providers(id INTEGER PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS applications(id INTEGER PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS renewals(id INTEGER PRIMARY KEY, data TEXT NOT NULL);
@@ -32,19 +50,33 @@ def init():
     c.commit(); c.close()
 
 def rows(table):
-    c=db(); out=[json.loads(r['data']) for r in c.execute(f'SELECT data FROM {table} ORDER BY id')]; c.close(); return out
+    c=db()
+    try:
+        cur=c.cursor(); cur.execute(f'SELECT data FROM {table} ORDER BY id'); result=cur.fetchall()
+        return [json.loads(r['data'] if isinstance(r,dict) else r[0]) for r in result]
+    finally: c.close()
 
 def replace(table, items):
-    c=db(); c.execute(f'DELETE FROM {table}')
-    for i,item in enumerate(items,1):
-        ident=int(item.get('id',i))
-        try: ident=int(ident)
-        except: ident=i
-        c.execute(f'INSERT OR REPLACE INTO {table}(id,data) VALUES(?,?)',(ident,json.dumps(item,ensure_ascii=False)))
-    c.commit(); c.close()
+    c=db()
+    try:
+        cur=c.cursor(); cur.execute(f'DELETE FROM {table}')
+        for i,item in enumerate(items,1):
+            ident=str(item.get('id',i)); payload=json.dumps(item,ensure_ascii=False)
+            if USE_POSTGRES: cur.execute(f'INSERT INTO {table}(id,data) VALUES(%s,%s)',(ident,payload))
+            else:
+                try: ident=int(ident)
+                except: ident=i
+                cur.execute(f'INSERT OR REPLACE INTO {table}(id,data) VALUES(?,?)',(ident,payload))
+        c.commit()
+    finally: c.close()
 
 def state():
-    return {'data':rows('providers'),'applications':rows('applications'),'renewals':rows('renewals'),'events':rows('events'),'notifications':rows('notifications'),'services':[r['name'] for r in db().execute('SELECT name FROM services ORDER BY id')]}
+    c=db()
+    try:
+        cur=c.cursor(); cur.execute('SELECT name FROM services ORDER BY id'); result=cur.fetchall()
+        services=[r['name'] if isinstance(r,dict) else r[0] for r in result]
+    finally: c.close()
+    return {'data':rows('providers'),'applications':rows('applications'),'renewals':rows('renewals'),'events':rows('events'),'notifications':rows('notifications'),'services':services}
 
 def is_admin(handler):
     cookie=handler.headers.get('Cookie','')
@@ -80,7 +112,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(204); self.send_header('Access-Control-Allow-Origin','*'); self.send_header('Access-Control-Allow-Headers','Content-Type'); self.send_header('Access-Control-Allow-Methods','GET,POST,OPTIONS'); self.end_headers()
     def do_GET(self):
         p=urlparse(self.path).path
-        if p=='/api/health': return self.send_json({'ok':True,'version':'V15.2','database':'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
+        if p=='/api/health': return self.send_json({'ok':True,'version':'V16','database':'PostgreSQL' if USE_POSTGRES else 'SQLite','whatsapp':'direct-link-mode','renewals':'receipt-review'})
         if p=='/api/session': return self.send_json({'authenticated':is_admin(self),'user':ADMIN_USER if is_admin(self) else None})
         if p=='/api/receipt':
             if not require_admin(self): return
@@ -88,14 +120,28 @@ class Handler(SimpleHTTPRequestHandler):
             q=parse_qs(urlparse(self.path).query); rel=q.get('path',[''])[0]
             if not rel.startswith('receipts/') or '..' in rel or '/' not in rel:
                 return self.send_json({'error':'Comprobante no válido'},400)
-            fname=os.path.basename(rel); fpath=os.path.join(RECEIPTS_DIR,fname)
-            if not os.path.isfile(fpath): return self.send_json({'error':'Comprobante no encontrado'},404)
-            mime=mimetypes.guess_type(fpath)[0] or 'application/octet-stream'; raw=open(fpath,'rb').read()
+            fname=os.path.basename(rel)
+            if USE_POSTGRES:
+                c=db()
+                try:
+                    cur=c.cursor(); cur.execute('SELECT mime,data FROM receipts WHERE path=%s',(rel,)); row=cur.fetchone()
+                finally: c.close()
+                if not row: return self.send_json({'error':'Comprobante no encontrado'},404)
+                mime=row['mime']; raw=bytes(row['data'])
+            else:
+                fpath=os.path.join(RECEIPTS_DIR,fname)
+                if not os.path.isfile(fpath): return self.send_json({'error':'Comprobante no encontrado'},404)
+                mime=mimetypes.guess_type(fpath)[0] or 'application/octet-stream'; raw=open(fpath,'rb').read()
             self.send_response(200); self.send_header('Content-Type',mime); self.send_header('Content-Length',str(len(raw))); self.send_header('Content-Disposition',f'inline; filename="{fname}"'); self.end_headers(); self.wfile.write(raw); return
         if p=='/api/state':
             if not require_admin(self): return
             return self.send_json(state())
-        if p=='/api/services': return self.send_json({'services':[r['name'] for r in db().execute('SELECT name FROM services ORDER BY id')]})
+        if p=='/api/services':
+            c=db()
+            try:
+                cur=c.cursor(); cur.execute('SELECT name FROM services ORDER BY id'); rr=cur.fetchall(); names=[r['name'] if isinstance(r,dict) else r[0] for r in rr]
+            finally: c.close()
+            return self.send_json({'services':names})
         return super().do_GET()
     def do_POST(self):
         p=urlparse(self.path).path
@@ -133,9 +179,16 @@ class Handler(SimpleHTTPRequestHandler):
                     mime=header.split(';')[0].replace('data:','')
                     ext=mimetypes.guess_extension(mime) or '.bin'
                     fname=f"renovacion_{int(time.time()*1000)}_{secrets.token_hex(4)}{ext}"
-                    fpath=os.path.join(RECEIPTS_DIR,fname)
-                    with open(fpath,'wb') as fh: fh.write(raw)
-                    body['receiptPath']='receipts/'+fname
+                    rel='receipts/'+fname
+                    if USE_POSTGRES:
+                        c=db()
+                        try:
+                            cur=c.cursor(); cur.execute('INSERT INTO receipts(path,mime,data) VALUES(%s,%s,%s) ON CONFLICT (path) DO UPDATE SET mime=EXCLUDED.mime,data=EXCLUDED.data',(rel,mime,psycopg2.Binary(raw))); c.commit()
+                        finally: c.close()
+                    else:
+                        fpath=os.path.join(RECEIPTS_DIR,fname)
+                        with open(fpath,'wb') as fh: fh.write(raw)
+                    body['receiptPath']=rel
                 except Exception:
                     return self.send_json({'error':'Comprobante inválido'},400)
             arr=rows('renewals'); body.setdefault('status','pendiente_comprobacion'); body.setdefault('createdAt',time.strftime('%Y-%m-%d %H:%M:%S')); arr.append(body); replace('renewals',arr[-500:])
@@ -157,5 +210,5 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_json({'error':'Ruta no encontrada'},404)
 
 if __name__=='__main__':
-    init(); print(f'TIVA V15.4 funcionando en http://localhost:{PORT}')
+    init(); print(f'TIVA V16 funcionando en http://localhost:{PORT}')
     ThreadingHTTPServer(('0.0.0.0',PORT),Handler).serve_forever()

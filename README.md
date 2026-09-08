@@ -1,17 +1,16 @@
-# TIVA V15.2
+# TIVA V16 — Render + PostgreSQL
 
-## Cómo iniciar
-1. Abre esta carpeta.
-2. En la barra de dirección del Explorador escribe `cmd` y presiona Enter.
-3. Ejecuta: `python server.py`
-4. Abre `http://127.0.0.1:8000/`
-5. Administración: `http://127.0.0.1:8000/admin.html`
+TIVA V16 está preparada para Render con PostgreSQL. Si existe `DATABASE_URL`, usa PostgreSQL; en local, si no existe, mantiene SQLite para desarrollo.
 
-## Acceso administrativo demo
-- Usuario: `admin`
-- Contraseña: `Admin123!`
+## Render
+1. Crear un Render Postgres en la misma región del Web Service.
+2. En el Web Service, definir `DATABASE_URL` con la **Internal Database URL** del Postgres.
+3. Definir `PRESTADORES_ADMIN_USER` y `PRESTADORES_ADMIN_PASSWORD` como variables secretas.
+4. Mantener Start Command: `python server.py`.
+5. Al desplegar, TIVA crea automáticamente sus tablas.
 
-## Importante
-No abras `admin.html` con doble clic. Debe abrirse desde `http://127.0.0.1:8000/admin.html`.
+## Recibos
+Con PostgreSQL, los comprobantes se guardan en la tabla privada `receipts` como datos binarios, evitando depender del disco efímero del servicio gratuito.
 
-V15.2 mantiene el menú público con solo Nosotros y Reglas de uso. La renovación sigue disponible mediante el enlace enviado cuando una membresía vence.
+## Local
+Sin `DATABASE_URL`, TIVA usa SQLite y puede arrancarse con `python server.py`.

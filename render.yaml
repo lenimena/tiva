@@ -2,10 +2,18 @@ services:
   - type: web
     name: tiva
     runtime: python
-    buildCommand: ""
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "python server.py"
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tiva-db
+          property: connectionString
       - key: PRESTADORES_ADMIN_USER
         sync: false
       - key: PRESTADORES_ADMIN_PASSWORD
         sync: false
+
+databases:
+  - name: tiva-db
+    plan: free
